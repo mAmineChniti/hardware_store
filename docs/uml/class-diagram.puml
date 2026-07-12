@@ -1,0 +1,208 @@
+@startuml Hardware Store Class Diagram
+' INOVEXAHUB - Système de Gestion Commerciale et Point de Vente (POS)
+' Sprint 1: Modélisation UML
+' Version: 1.0 (MVP)
+
+' ============================================
+' ENUMS
+' ============================================
+
+enum UserRole {
+  ADMIN
+  EMPLOYEE
+}
+
+enum UnitType {
+  UNITARY
+  WEIGHT
+  LENGTH
+  VOLUME
+}
+
+enum DocumentType {
+  QUOTE
+  DELIVERY_NOTE
+  INVOICE
+}
+
+enum DocumentStatus {
+  DRAFT
+  VALIDATED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  CHECK
+  CREDIT
+}
+
+enum TransactionType {
+  SALE
+  PAYMENT
+  ADJUSTMENT
+}
+
+' ============================================
+' ENTITIES
+' ============================================
+
+class User {
+  - Long id
+  - String username
+  - String password
+  - String fullName
+  - UserRole role
+  - Boolean enabled
+  - LocalDateTime createdAt
+  - LocalDateTime updatedAt
+  + onCreate()
+  + onUpdate()
+}
+
+class Client {
+  - Long id
+  - String name
+  - String phone
+  - String email
+  - String address
+  - String tin
+  - BigDecimal creditLimit
+  - BigDecimal currentDebt
+  - Boolean deleted
+  - LocalDateTime createdAt
+  - LocalDateTime updatedAt
+  + onCreate()
+  + onUpdate()
+}
+
+class Product {
+  - Long id
+  - String reference
+  - String barcode
+  - String name
+  - String description
+  - String category
+  - UnitType unitType
+  - Boolean isHeavyMaterial
+  - String baseUnit
+  - Double stockQuantity
+  - BigDecimal averagePurchasePrice
+  - BigDecimal priceOnSite
+  - BigDecimal priceDelivered
+  - LocalDateTime createdAt
+  - LocalDateTime updatedAt
+  + onCreate()
+  + onUpdate()
+}
+
+class ProductConditioning {
+  - Long id
+  - Product product
+  - String description
+  - Double quantityPerUnit
+  - BigDecimal unitPrice
+  - LocalDateTime createdAt
+  - LocalDateTime updatedAt
+  + onCreate()
+  + onUpdate()
+}
+
+class Document {
+  - Long id
+  - String documentNumber
+  - LocalDateTime date
+  - DocumentType documentType
+  - DocumentStatus status
+  - Client client
+  - User user
+  - BigDecimal totalExcludingTax
+  - BigDecimal vatRate
+  - BigDecimal totalVat
+  - BigDecimal totalIncludingTax
+  - BigDecimal transportFee
+  - BigDecimal stampDuty
+  - Boolean isCreditSale
+  - LocalDateTime createdAt
+  - LocalDateTime updatedAt
+  + onCreate()
+  + onUpdate()
+}
+
+class DocumentLine {
+  - Long id
+  - Integer lineNumber
+  - Document document
+  - Product product
+  - String conditioningDescription
+  - Double quantity
+  - BigDecimal unitPrice
+  - BigDecimal totalLineExcludingTax
+  - BigDecimal totalLineIncludingTax
+  - Boolean isDelivered
+  - LocalDateTime createdAt
+  - LocalDateTime updatedAt
+  + onCreate()
+  + onUpdate()
+}
+
+class PaymentReceipt {
+  - Long id
+  - String receiptNumber
+  - Client client
+  - BigDecimal amountPaid
+  - LocalDateTime paymentDate
+  - PaymentMethod paymentMethod
+  - BigDecimal previousDebt
+  - BigDecimal newDebt
+  - User user
+  - LocalDateTime createdAt
+  - LocalDateTime updatedAt
+  + onCreate()
+  + onUpdate()
+}
+
+class CreditHistory {
+  - Long id
+  - Client client
+  - Document document
+  - PaymentReceipt paymentReceipt
+  - TransactionType transactionType
+  - BigDecimal amount
+  - BigDecimal runningBalance
+  - Boolean deleted
+  - LocalDateTime entryDate
+}
+
+class AuditLog {
+  - Long id
+  - String username
+  - String action
+  - String entityType
+  - Long entityId
+  - String details
+  - LocalDateTime timestamp
+  + onCreate()
+}
+
+' ============================================
+' RELATIONSHIPS
+' ============================================
+
+User "1" -- "*" Document : creates >
+User "1" -- "*" PaymentReceipt : registers >
+
+Client "1" -- "*" Document : has >
+Client "1" -- "*" PaymentReceipt : makes >
+Client "1" -- "*" CreditHistory : has >
+
+Product "1" -- "*" ProductConditioning : has >
+Product "1" -- "*" DocumentLine : appears in >
+
+Document "1" -- "*" DocumentLine : contains >
+Document "1" -- "*" CreditHistory : generates (if credit sale) >
+
+PaymentReceipt "1" -- "*" CreditHistory : generates >
+
+@enduml

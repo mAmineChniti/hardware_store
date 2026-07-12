@@ -1,0 +1,159 @@
+@startuml Hardware Store Entity Relationships
+' INOVEXAHUB - Système de Gestion Commerciale et Point de Vente (POS)
+' Sprint 1: Modélisation UML - Entity Relationships
+' Version: 1.0 (MVP)
+
+skinparam linetype ortho
+
+entity "User" as user {
+  *id : BIGINT
+  --
+  username : VARCHAR(50)
+  password : VARCHAR
+  full_name : VARCHAR(100)
+  role : VARCHAR
+  enabled : BOOLEAN
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "Client" as client {
+  *id : BIGINT
+  --
+  name : VARCHAR(100)
+  phone : VARCHAR(20)
+  email : VARCHAR(100)
+  address : VARCHAR(255)
+  tin : VARCHAR(50)
+  credit_limit : DECIMAL(19,3)
+  current_debt : DECIMAL(19,3)
+  deleted : BOOLEAN
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "Product" as product {
+  *id : BIGINT
+  --
+  reference : VARCHAR(50)
+  barcode : VARCHAR(50)
+  name : VARCHAR(100)
+  description : VARCHAR(500)
+  category : VARCHAR(50)
+  unit_type : VARCHAR
+  is_heavy_material : BOOLEAN
+  base_unit : VARCHAR(20)
+  stock_quantity : DECIMAL(19,3)
+  average_purchase_price : DECIMAL(19,3)
+  price_on_site : DECIMAL(19,3)
+  price_delivered : DECIMAL(19,3)
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "ProductConditioning" as conditioning {
+  *id : BIGINT
+  --
+  product_id : BIGINT
+  description : VARCHAR(100)
+  quantity_per_unit : DECIMAL(19,3)
+  unit_price : DECIMAL(19,3)
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "Document" as document {
+  *id : BIGINT
+  --
+  document_number : VARCHAR(50)
+  date : TIMESTAMP
+  document_type : VARCHAR
+  status : VARCHAR
+  client_id : BIGINT
+  user_id : BIGINT
+  total_excluding_tax : DECIMAL(19,3)
+  vat_rate : DECIMAL(5,2)
+  total_vat : DECIMAL(19,3)
+  total_including_tax : DECIMAL(19,3)
+  transport_fee : DECIMAL(19,3)
+  stamp_duty : DECIMAL(19,3)
+  is_credit_sale : BOOLEAN
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "DocumentLine" as document_line {
+  *id : BIGINT
+  --
+  document_id : BIGINT
+  product_id : BIGINT
+  line_number : INTEGER
+  conditioning_description : VARCHAR(100)
+  quantity : DECIMAL(19,3)
+  unit_price : DECIMAL(19,3)
+  total_line_excluding_tax : DECIMAL(19,3)
+  total_line_including_tax : DECIMAL(19,3)
+  is_delivered : BOOLEAN
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "PaymentReceipt" as payment_receipt {
+  *id : BIGINT
+  --
+  receipt_number : VARCHAR(50)
+  client_id : BIGINT
+  user_id : BIGINT
+  amount_paid : DECIMAL(19,3)
+  payment_date : TIMESTAMP
+  payment_method : VARCHAR
+  previous_debt : DECIMAL(19,3)
+  new_debt : DECIMAL(19,3)
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "CreditHistory" as credit_history {
+  *id : BIGINT
+  --
+  client_id : BIGINT
+  document_id : BIGINT
+  payment_receipt_id : BIGINT
+  transaction_type : VARCHAR
+  amount : DECIMAL(19,3)
+  running_balance : DECIMAL(19,3)
+  deleted : BOOLEAN
+  entry_date : TIMESTAMP
+}
+
+entity "AuditLog" as audit_log {
+  *id : BIGINT
+  --
+  username : VARCHAR(50)
+  action : VARCHAR(100)
+  entity_type : VARCHAR(50)
+  entity_id : BIGINT
+  details : TEXT
+  timestamp : TIMESTAMP
+}
+
+' ============================================
+' RELATIONSHIPS
+' ============================================
+
+user ||..o{ document : "creates"
+user ||..o{ payment_receipt : "registers"
+
+client ||..o{ document : "has"
+client ||..o{ payment_receipt : "makes"
+client ||..o{ credit_history : "has"
+
+product ||..o{ conditioning : "has"
+product ||..o{ document_line : "appears in"
+
+document ||..o{ document_line : "contains"
+document |o..o{ credit_history : "generates (credit)"
+
+payment_receipt |o..o{ credit_history : "generates"
+
+@enduml
