@@ -190,6 +190,15 @@ class AuditLog {
 ' RELATIONSHIPS
 ' ============================================
 
+' Enum relationships
+User --> UserRole : uses
+Product --> UnitType : uses
+Document --> DocumentType : uses
+Document --> DocumentStatus : uses
+PaymentReceipt --> PaymentMethod : uses
+CreditHistory --> TransactionType : uses
+
+' Entity relationships
 User "1" -- "*" Document : creates >
 User "1" -- "*" PaymentReceipt : registers >
 

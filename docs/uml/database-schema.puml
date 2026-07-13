@@ -11,10 +11,10 @@ skinparam entity {
 }
 
 ' ============================================
--- TABLES
+' TABLES
 ' ============================================
 
-table "users" {
+entity users {
   id BIGSERIAL PK
   username VARCHAR(50) UNIQUE
   password VARCHAR
@@ -23,11 +23,9 @@ table "users" {
   enabled BOOLEAN
   created_at TIMESTAMP
   updated_at TIMESTAMP
-  --
-  idx_users_username
 }
 
-table "clients" {
+entity clients {
   id BIGSERIAL PK
   name VARCHAR(100)
   phone VARCHAR(20)
@@ -39,12 +37,9 @@ table "clients" {
   deleted BOOLEAN
   created_at TIMESTAMP
   updated_at TIMESTAMP
-  --
-  idx_clients_name
-  idx_clients_tin
 }
 
-table "products" {
+entity products {
   id BIGSERIAL PK
   reference VARCHAR(50) UNIQUE
   barcode VARCHAR(50) UNIQUE
@@ -60,14 +55,9 @@ table "products" {
   price_delivered DECIMAL(19,3)
   created_at TIMESTAMP
   updated_at TIMESTAMP
-  --
-  idx_products_barcode
-  idx_products_reference
-  idx_products_name
-  idx_products_category
 }
 
-table "product_conditionings" {
+entity product_conditionings {
   id BIGSERIAL PK
   product_id BIGINT FK
   description VARCHAR(100)
@@ -75,11 +65,9 @@ table "product_conditionings" {
   unit_price DECIMAL(19,3)
   created_at TIMESTAMP
   updated_at TIMESTAMP
-  --
-  idx_product_conditionings_product_id
 }
 
-table "documents" {
+entity documents {
   id BIGSERIAL PK
   document_number VARCHAR(50) UNIQUE
   date TIMESTAMP
@@ -96,15 +84,9 @@ table "documents" {
   is_credit_sale BOOLEAN
   created_at TIMESTAMP
   updated_at TIMESTAMP
-  --
-  idx_documents_document_number
-  idx_documents_date
-  idx_documents_document_type
-  idx_documents_status
-  idx_documents_client_id
 }
 
-table "document_lines" {
+entity document_lines {
   id BIGSERIAL PK
   document_id BIGINT FK
   product_id BIGINT FK
@@ -117,12 +99,9 @@ table "document_lines" {
   is_delivered BOOLEAN
   created_at TIMESTAMP
   updated_at TIMESTAMP
-  --
-  idx_document_lines_document_id
-  idx_document_lines_product_id
 }
 
-table "payment_receipts" {
+entity payment_receipts {
   id BIGSERIAL PK
   receipt_number VARCHAR(50) UNIQUE
   client_id BIGINT FK
@@ -134,13 +113,9 @@ table "payment_receipts" {
   new_debt DECIMAL(19,3)
   created_at TIMESTAMP
   updated_at TIMESTAMP
-  --
-  idx_payment_receipts_receipt_number
-  idx_payment_receipts_client_id
-  idx_payment_receipts_payment_date
 }
 
-table "credit_history" {
+entity credit_history {
   id BIGSERIAL PK
   client_id BIGINT FK
   document_id BIGINT FK
@@ -150,13 +125,9 @@ table "credit_history" {
   running_balance DECIMAL(19,3)
   deleted BOOLEAN
   entry_date TIMESTAMP
-  --
-  idx_credit_history_client_id
-  idx_credit_history_entry_date
-  idx_credit_history_transaction_type
 }
 
-table "audit_logs" {
+entity audit_logs {
   id BIGSERIAL PK
   username VARCHAR(50)
   action VARCHAR(100)
@@ -164,13 +135,10 @@ table "audit_logs" {
   entity_id BIGINT
   details TEXT
   timestamp TIMESTAMP
-  --
-  idx_audit_logs_timestamp
-  idx_audit_logs_entity
 }
 
 ' ============================================
--- FOREIGN KEY RELATIONSHIPS
+' FOREIGN KEY RELATIONSHIPS
 ' ============================================
 
 product_conditionings }o--|| products : "product_id"
@@ -185,7 +153,7 @@ credit_history }o--o| documents : "document_id"
 credit_history }o--o| payment_receipts : "payment_receipt_id"
 
 ' ============================================
--- NOTES
+' NOTES
 ' ============================================
 
 note right of products
