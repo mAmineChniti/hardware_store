@@ -1,0 +1,249 @@
+@startuml Diagramme de Classes - Magasin de Matériaux
+' INOVEXAHUB - Système de Gestion Commerciale et Point de Vente (POS)
+' Sprint 1: Modélisation UML
+' Version: 1.0 (MVP)
+
+' ============================================
+' ÉNUMÉRATIONS
+' ============================================
+
+enum RoleUtilisateur {
+  ADMINISTRATEUR
+  EMPLOYÉ
+}
+
+enum TypeUnité {
+  UNITAIRE
+  POIDS
+  LONGUEUR
+  VOLUME
+}
+
+enum TypeDocument {
+  DEVIS
+  BON_LIVRAISON
+  FACTURE
+}
+
+enum StatutDocument {
+  BROUILLON
+  VALIDÉ
+  ANNULÉ
+}
+
+enum ModePaiement {
+  ESPÈCES
+  VIREMENT
+  CHÈQUE
+  CRÉDIT
+}
+
+enum TypeTransaction {
+  VENTE
+  PAIEMENT
+  AJUSTEMENT
+}
+
+' ============================================
+' ENTITÉS
+' ============================================
+
+class Utilisateur {
+  - Long id
+  - String nomUtilisateur
+  - String motDePasse
+  - String nomComplet
+  - RoleUtilisateur role
+  - Boolean activé
+  - LocalDateTime dateCréation
+  - LocalDateTime dateModification
+  + onCreate()
+  + onUpdate()
+}
+
+class Client {
+  - Long id
+  - String nom
+  - String téléphone
+  - String email
+  - String adresse
+  - String numéroMatriculeFiscal
+  - BigDecimal limiteCrédit
+  - BigDecimal detteActuelle
+  - Boolean supprimé
+  - LocalDateTime dateCréation
+  - LocalDateTime dateModification
+  + onCreate()
+  + onUpdate()
+}
+
+class Fournisseur {
+  - Long id
+  - String nom
+  - String téléphone
+  - String email
+  - String adresse
+  - String numéroMatriculeFiscal
+  - String personneContact
+  - String conditionsPaiement
+  - String notes
+  - Boolean supprimé
+  - LocalDateTime dateCréation
+  - LocalDateTime dateModification
+  + onCreate()
+  + onUpdate()
+}
+
+class Produit {
+  - Long id
+  - String référence
+  - String nom
+  - String description
+  - String image
+  - String catégorie
+  - TypeUnité typeUnité
+  - Boolean estMatériauLourd
+  - String unitéBase
+  - Double quantitéStock
+  - BigDecimal prixMoyenAchat
+  - BigDecimal prixSurPlace
+  - BigDecimal prixLivré
+  - LocalDateTime dateCréation
+  - LocalDateTime dateModification
+  + onCreate()
+  + onUpdate()
+}
+
+class ConditionnementProduit {
+  - Long id
+  - Produit produit
+  - String description
+  - Double quantitéParUnité
+  - BigDecimal prixUnitaire
+  - LocalDateTime dateCréation
+  - LocalDateTime dateModification
+  + onCreate()
+  + onUpdate()
+}
+
+class CoûtProduit {
+  - Long id
+  - Produit produit
+  - Fournisseur fournisseur
+  - BigDecimal coûtUnitaire
+  - LocalDate dateEffective
+  - String notes
+  - LocalDateTime dateCréation
+  + onCreate()
+}
+
+class Document {
+  - Long id
+  - String numéroDocument
+  - LocalDateTime date
+  - TypeDocument typeDocument
+  - StatutDocument statut
+  - Client client
+  - Utilisateur utilisateur
+  - BigDecimal totalHorsTaxe
+  - BigDecimal tauxTVA
+  - BigDecimal totalTVA
+  - BigDecimal totalTTC
+  - BigDecimal fraisTransport
+  - BigDecimal droitTimbre
+  - Boolean estVenteCrédit
+  - LocalDateTime dateCréation
+  - LocalDateTime dateModification
+  + onCreate()
+  + onUpdate()
+}
+
+class LigneDocument {
+  - Long id
+  - Integer numéroLigne
+  - Document document
+  - Produit produit
+  - String descriptionConditionnement
+  - Double quantité
+  - BigDecimal prixUnitaire
+  - BigDecimal totalLigneHorsTaxe
+  - BigDecimal totalLigneTTC
+  - Boolean estLivré
+  - LocalDateTime dateCréation
+  - LocalDateTime dateModification
+  + onCreate()
+  + onUpdate()
+}
+
+class ReçuPaiement {
+  - Long id
+  - String numéroReçu
+  - Client client
+  - BigDecimal montantPayé
+  - LocalDateTime datePaiement
+  - ModePaiement modePaiement
+  - BigDecimal dettePrécédente
+  - BigDecimal nouvelleDette
+  - Utilisateur utilisateur
+  - HistoriqueCrédit historiqueCrédit
+  - LocalDateTime dateCréation
+  - LocalDateTime dateModification
+  + onCreate()
+  + onUpdate()
+}
+
+class HistoriqueCrédit {
+  - Long id
+  - Client client
+  - Document document
+  - ReçuPaiement reçuPaiement
+  - TypeTransaction typeTransaction
+  - BigDecimal montant
+  - BigDecimal soldeCourant
+  - Boolean supprimé
+  - LocalDateTime dateEntrée
+}
+
+class JournalAudit {
+  - Long id
+  - String nomUtilisateur
+  - String action
+  - String typeEntité
+  - Long idEntité
+  - String détails
+  - LocalDateTime horodatage
+  + onCreate()
+}
+
+' ============================================
+' RELATIONS
+' ============================================
+
+' Relations des énumérations
+Utilisateur --> RoleUtilisateur : utilise
+Produit --> TypeUnité : utilise
+Document --> TypeDocument : utilise
+Document --> StatutDocument : utilise
+ReçuPaiement --> ModePaiement : utilise
+HistoriqueCrédit --> TypeTransaction : utilise
+
+' Relations des entités
+Utilisateur "1" -- "*" Document : crée >
+Utilisateur "1" -- "*" ReçuPaiement : enregistre >
+
+Client "1" -- "*" Document : possède >
+Client "1" -- "*" ReçuPaiement : effectue >
+Client "1" -- "*" HistoriqueCrédit : possède >
+
+Produit "1" -- "*" ConditionnementProduit : possède >
+Produit "1" -- "*" CoûtProduit : possède historique coûts >
+Produit "1" -- "*" LigneDocument : apparaît dans >
+
+Fournisseur "1" -- "*" CoûtProduit : fournit coûts pour >
+
+Document "1" -- "*" LigneDocument : contient >
+Document "1" -- "*" HistoriqueCrédit : génère (si vente crédit) >
+
+ReçuPaiement "1" -- "1" HistoriqueCrédit : génère >
+
+@enduml

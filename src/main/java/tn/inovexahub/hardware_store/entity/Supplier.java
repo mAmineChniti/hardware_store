@@ -10,7 +10,6 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,16 +18,15 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Client entity representing customers ("Tiers" with "Carnet" system). Section 2: Client entity -
- * creditLimit: maps to "plafond_credit_autorise" - currentDebt: maps to "Dette_Actuelle" (updated
- * via event listeners)
+ * Supplier entity representing vendors who supply products to the hardware store. Similar to Client
+ * but for procurement side.
  */
 @Entity
-@Table(name = "clients")
+@Table(name = "suppliers")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class Client {
+public class Supplier {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -49,11 +47,14 @@ public class Client {
   @Column(name = "tax_identification_number", length = 50)
   private String taxIdentificationNumber; // Matricule fiscal
 
-  @Column(name = "credit_limit", precision = 19, scale = 3)
-  private BigDecimal creditLimit = BigDecimal.ZERO; // plafond_credit_autorise
+  @Column(name = "contact_person", length = 100)
+  private String contactPerson;
 
-  @Column(name = "current_debt", precision = 19, scale = 3)
-  private BigDecimal currentDebt = BigDecimal.ZERO; // Dette_Actuelle
+  @Column(name = "payment_terms", length = 100)
+  private String paymentTerms;
+
+  @Column(name = "notes", length = 500)
+  private String notes;
 
   @Column(name = "deleted", nullable = false)
   private Boolean deleted = false;
@@ -64,14 +65,8 @@ public class Client {
   @Column(name = "updated_at")
   private LocalDateTime updatedAt;
 
-  @OneToMany(mappedBy = "client", fetch = FetchType.LAZY)
-  private List<Document> documents = new ArrayList<>();
-
-  @OneToMany(mappedBy = "client", fetch = FetchType.LAZY)
-  private List<PaymentReceipt> paymentReceipts = new ArrayList<>();
-
-  @OneToMany(mappedBy = "client", fetch = FetchType.LAZY)
-  private List<CreditHistory> creditHistory = new ArrayList<>();
+  @OneToMany(mappedBy = "supplier", fetch = FetchType.LAZY)
+  private List<ProductCost> productCosts = new ArrayList<>();
 
   @PrePersist
   protected void onCreate() {

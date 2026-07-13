@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -61,6 +62,10 @@ public class PaymentReceipt {
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "user_id")
   private User user; // Who registered the payment
+
+  @OneToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "credit_history_id")
+  private CreditHistory creditHistory; // Generated credit history entry
 
   @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;

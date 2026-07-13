@@ -1,0 +1,189 @@
+@startuml Relations Entités - Magasin de Matériaux
+' INOVEXAHUB - Système de Gestion Commerciale et Point de Vente (POS)
+' Sprint 1: Modélisation UML - Relations Entités
+' Version: 1.0 (MVP)
+
+skinparam linetype ortho
+
+entity "Utilisateur" as utilisateur {
+  *id : BIGINT
+  --
+  nom_utilisateur : VARCHAR(50)
+  mot_de_passe : VARCHAR
+  nom_complet : VARCHAR(100)
+  rôle : VARCHAR
+  activé : BOOLEAN
+  date_création : TIMESTAMP
+  date_modification : TIMESTAMP
+}
+
+entity "Client" as client {
+  *id : BIGINT
+  --
+  nom : VARCHAR(100)
+  téléphone : VARCHAR(20)
+  email : VARCHAR(100)
+  adresse : VARCHAR(255)
+  numéro_matricule_fiscal : VARCHAR(50)
+  limite_crédit : DECIMAL(19,3)
+  dette_actuelle : DECIMAL(19,3)
+  supprimé : BOOLEAN
+  date_création : TIMESTAMP
+  date_modification : TIMESTAMP
+}
+
+entity "Fournisseur" as fournisseur {
+  *id : BIGINT
+  --
+  nom : VARCHAR(100)
+  téléphone : VARCHAR(20)
+  email : VARCHAR(100)
+  adresse : VARCHAR(255)
+  numéro_matricule_fiscal : VARCHAR(50)
+  personne_contact : VARCHAR(100)
+  conditions_paiement : VARCHAR(100)
+  notes : VARCHAR(500)
+  supprimé : BOOLEAN
+  date_création : TIMESTAMP
+  date_modification : TIMESTAMP
+}
+
+entity "Produit" as produit {
+  *id : BIGINT
+  --
+  référence : VARCHAR(50)
+  nom : VARCHAR(100)
+  description : VARCHAR(500)
+  image : TEXT
+  catégorie : VARCHAR(50)
+  type_unité : VARCHAR
+  est_matériau_lourd : BOOLEAN
+  unité_base : VARCHAR(20)
+  quantité_stock : DECIMAL(19,3)
+  prix_moyen_achat : DECIMAL(19,3)
+  prix_sur_place : DECIMAL(19,3)
+  prix_livré : DECIMAL(19,3)
+  date_création : TIMESTAMP
+  date_modification : TIMESTAMP
+}
+
+entity "ConditionnementProduit" as conditionnement {
+  *id : BIGINT
+  --
+  produit_id : BIGINT
+  description : VARCHAR(100)
+  quantité_par_unité : DECIMAL(19,3)
+  prix_unitaire : DECIMAL(19,3)
+  date_création : TIMESTAMP
+  date_modification : TIMESTAMP
+}
+
+entity "CoûtProduit" as coût_produit {
+  *id : BIGINT
+  --
+  produit_id : BIGINT
+  fournisseur_id : BIGINT
+  coût_unitaire : DECIMAL(19,3)
+  date_effective : DATE
+  notes : VARCHAR(500)
+  date_création : TIMESTAMP
+}
+
+entity "Document" as document {
+  *id : BIGINT
+  --
+  numéro_document : VARCHAR(50)
+  date : TIMESTAMP
+  type_document : VARCHAR
+  statut : VARCHAR
+  client_id : BIGINT
+  utilisateur_id : BIGINT
+  total_hors_taxe : DECIMAL(19,3)
+  taux_tva : DECIMAL(5,2)
+  total_tva : DECIMAL(19,3)
+  total_ttc : DECIMAL(19,3)
+  frais_transport : DECIMAL(19,3)
+  droit_timbre : DECIMAL(19,3)
+  est_vente_crédit : BOOLEAN
+  date_création : TIMESTAMP
+  date_modification : TIMESTAMP
+}
+
+entity "LigneDocument" as ligne_document {
+  *id : BIGINT
+  --
+  document_id : BIGINT
+  produit_id : BIGINT
+  numéro_ligne : INTEGER
+  description_conditionnement : VARCHAR(100)
+  quantité : DECIMAL(19,3)
+  prix_unitaire : DECIMAL(19,3)
+  total_ligne_hors_taxe : DECIMAL(19,3)
+  total_ligne_ttc : DECIMAL(19,3)
+  est_livré : BOOLEAN
+  date_création : TIMESTAMP
+  date_modification : TIMESTAMP
+}
+
+entity "ReçuPaiement" as reçu_paiement {
+  *id : BIGINT
+  --
+  numéro_reçu : VARCHAR(50)
+  client_id : BIGINT
+  utilisateur_id : BIGINT
+  montant_payé : DECIMAL(19,3)
+  date_paiement : TIMESTAMP
+  mode_paiement : VARCHAR
+  dette_précédente : DECIMAL(19,3)
+  nouvelle_dette : DECIMAL(19,3)
+  date_création : TIMESTAMP
+  date_modification : TIMESTAMP
+}
+
+entity "HistoriqueCrédit" as historique_crédit {
+  *id : BIGINT
+  --
+  client_id : BIGINT
+  document_id : BIGINT
+  reçu_paiement_id : BIGINT
+  type_transaction : VARCHAR
+  montant : DECIMAL(19,3)
+  solde_courant : DECIMAL(19,3)
+  supprimé : BOOLEAN
+  date_entrée : TIMESTAMP
+}
+
+entity "JournalAudit" as journal_audit {
+  *id : BIGINT
+  --
+  nom_utilisateur : VARCHAR(50)
+  action : VARCHAR(100)
+  type_entité : VARCHAR(50)
+  id_entité : BIGINT
+  détails : TEXT
+  horodatage : TIMESTAMP
+}
+
+' ============================================
+' RELATIONS
+' ============================================
+
+utilisateur ||..o{ document : "crée"
+utilisateur ||..o{ reçu_paiement : "enregistre"
+
+client ||..o{ document : "possède"
+client ||..o{ reçu_paiement : "effectue"
+client ||..o{ historique_crédit : "possède"
+
+produit ||..o{ conditionnement : "possède"
+produit ||..o{ coût_produit : "possède historique coûts"
+produit ||..o{ ligne_document : "apparaît dans"
+
+fournisseur ||..o{ coût_produit : "fournit coûts pour"
+
+document ||..o{ ligne_document : "contient"
+document |o..o{ historique_crédit : "génère (crédit)"
+
+reçu_paiement |o--|| historique_crédit : "génère"
+
+@enduml

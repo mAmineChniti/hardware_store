@@ -67,9 +67,26 @@ class Client {
   - String phone
   - String email
   - String address
-  - String tin
+  - String taxIdentificationNumber
   - BigDecimal creditLimit
   - BigDecimal currentDebt
+  - Boolean deleted
+  - LocalDateTime createdAt
+  - LocalDateTime updatedAt
+  + onCreate()
+  + onUpdate()
+}
+
+class Supplier {
+  - Long id
+  - String name
+  - String phone
+  - String email
+  - String address
+  - String taxIdentificationNumber
+  - String contactPerson
+  - String paymentTerms
+  - String notes
   - Boolean deleted
   - LocalDateTime createdAt
   - LocalDateTime updatedAt
@@ -80,9 +97,9 @@ class Client {
 class Product {
   - Long id
   - String reference
-  - String barcode
   - String name
   - String description
+  - String image
   - String category
   - UnitType unitType
   - Boolean isHeavyMaterial
@@ -107,6 +124,17 @@ class ProductConditioning {
   - LocalDateTime updatedAt
   + onCreate()
   + onUpdate()
+}
+
+class ProductCost {
+  - Long id
+  - Product product
+  - Supplier supplier
+  - BigDecimal unitCost
+  - LocalDate effectiveDate
+  - String notes
+  - LocalDateTime createdAt
+  + onCreate()
 }
 
 class Document {
@@ -157,6 +185,7 @@ class PaymentReceipt {
   - BigDecimal previousDebt
   - BigDecimal newDebt
   - User user
+  - CreditHistory creditHistory
   - LocalDateTime createdAt
   - LocalDateTime updatedAt
   + onCreate()
@@ -207,11 +236,14 @@ Client "1" -- "*" PaymentReceipt : makes >
 Client "1" -- "*" CreditHistory : has >
 
 Product "1" -- "*" ProductConditioning : has >
+Product "1" -- "*" ProductCost : has cost history >
 Product "1" -- "*" DocumentLine : appears in >
+
+Supplier "1" -- "*" ProductCost : provides costs for >
 
 Document "1" -- "*" DocumentLine : contains >
 Document "1" -- "*" CreditHistory : generates (if credit sale) >
 
-PaymentReceipt "1" -- "*" CreditHistory : generates >
+PaymentReceipt "1" -- "1" CreditHistory : generates >
 
 @enduml
