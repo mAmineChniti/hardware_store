@@ -14,7 +14,6 @@ Système de gestion commerciale complet pour les magasins de matériaux de const
 - [Installation](#installation)
 - [API Documentation](#api-documentation)
 - [Tests](#tests)
-- [Licence](#licence)
 
 ## 🎯 Vue d'ensemble
 
@@ -104,7 +103,7 @@ INOVEXAHUB Hardware Store POS est une solution de gestion commerciale moderne co
 
 ## 🗄️ Schéma de la Base de Données
 
-![Schéma Base de Données](docs/images/Schéma Base de Données - Magasin de Matériaux.png)
+![Schéma Base de Données](docs/images/Schema-Base-De-Donnees-Magasin-Materiaux.png)
 
 ### Tables Principales
 
@@ -130,7 +129,7 @@ INOVEXAHUB Hardware Store POS est une solution de gestion commerciale moderne co
 
 ## 📊 Diagramme de Classes
 
-![Diagramme de Classes](docs/images/Diagramme de Classes - Magasin de Matériaux.png)
+![Diagramme de Classes](docs/images/Diagramme-Classes-Magasin-Materiaux.png)
 
 ### Entités Principales
 
@@ -157,7 +156,7 @@ INOVEXAHUB Hardware Store POS est une solution de gestion commerciale moderne co
 
 ## 🔗 Relations des Entités
 
-![Relations Entités](docs/images/Relations Entités - Magasin de Matériaux.png)
+![Relations Entités](docs/images/Relations-Entites-Magasin-Materiaux.png)
 
 ### Relations Clés
 
@@ -262,28 +261,6 @@ http://localhost:8080/swagger-ui.html
 - `POST /api/auth/login` - Connexion utilisateur
 - `POST /api/auth/register` - Inscription utilisateur
 - `PUT /api/auth/users/{id}` - Mise à jour utilisateur
-- `DELETE /api/auth/users/{id}` - Suppression utilisateur
-
-#### Produits
-- `GET /api/products` - Liste des produits
-- `GET /api/products/{id}` - Détails d'un produit
-- `POST /api/products` - Créer un produit
-- `PUT /api/products/{id}` - Mettre à jour un produit
-- `DELETE /api/products/{id}` - Supprimer un produit
-
-#### Clients
-- `GET /api/clients` - Liste des clients
-- `GET /api/clients/{id}` - Détails d'un client
-- `POST /api/clients` - Créer un client
-- `PUT /api/clients/{id}` - Mettre à jour un client
-- `DELETE /api/clients/{id}` - Supprimer un client
-
-#### Documents
-- `GET /api/documents` - Liste des documents
-- `GET /api/documents/{id}` - Détails d'un document
-- `POST /api/documents` - Créer un document
-- `PUT /api/documents/{id}` - Mettre à jour un document
-- `POST /api/documents/{id}/validate` - Valider un document
 
 ## 🧪 Tests
 
@@ -312,36 +289,3 @@ http://localhost:8080/swagger-ui.html
 # Lint complet
 ./gradlew lint
 ```
-
-## 📝 Scripts Utiles
-
-### Lint et Formatage
-```bash
-./gradlew lint          # Vérification complète
-./gradlew format        # Formatage du code
-```
-
-### Build
-```bash
-./gradlew build         # Build complet
-./gradlew bootRun       # Lancer l'application
-```
-
-## 📄 Licence
-
-Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
-
-## 👥 Équipe
-
-**INOVEXAHUB** - Équipe de développement
-
-## 📞 Support
-
-Pour toute question ou support, contactez-nous à:
-- Email: contact@inovexahub.tn
-- Site Web: https://inovexahub.tn
-
----
-
-**Version**: 1.0.0 (MVP)  
-**Dernière mise à jour**: Juillet 2026
