@@ -20,6 +20,7 @@ import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import tn.inovexahub.hardware_store.enums.UnitType;
 
 /**
@@ -33,6 +34,7 @@ import tn.inovexahub.hardware_store.enums.UnitType;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString
 public class Product {
 
   @Id
@@ -42,14 +44,14 @@ public class Product {
   @Column(name = "reference", unique = true, length = 50)
   private String reference;
 
-  @Column(name = "barcode", unique = true, length = 50)
-  private String barcode;
-
   @Column(name = "name", nullable = false, length = 100)
   private String name;
 
   @Column(name = "description", length = 500)
   private String description;
+
+  @Column(name = "image", columnDefinition = "TEXT")
+  private String image; // Base64 encoded image string
 
   @Column(name = "category", length = 50)
   private String category;
@@ -85,10 +87,16 @@ public class Product {
   private LocalDateTime updatedAt;
 
   @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+  @ToString.Exclude
   private List<ProductConditioning> conditionings = new ArrayList<>();
 
   @OneToMany(mappedBy = "product", fetch = FetchType.LAZY)
+  @ToString.Exclude
   private List<DocumentLine> documentLines = new ArrayList<>();
+
+  @OneToMany(mappedBy = "product", fetch = FetchType.LAZY)
+  @ToString.Exclude
+  private List<ProductCost> costHistory = new ArrayList<>();
 
   @PrePersist
   protected void onCreate() {

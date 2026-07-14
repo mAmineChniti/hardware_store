@@ -24,9 +24,25 @@ entity "Client" as client {
   phone : VARCHAR(20)
   email : VARCHAR(100)
   address : VARCHAR(255)
-  tin : VARCHAR(50)
+  tax_identification_number : VARCHAR(50)
   credit_limit : DECIMAL(19,3)
   current_debt : DECIMAL(19,3)
+  deleted : BOOLEAN
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "Supplier" as supplier {
+  *id : BIGINT
+  --
+  name : VARCHAR(100)
+  phone : VARCHAR(20)
+  email : VARCHAR(100)
+  address : VARCHAR(255)
+  tax_identification_number : VARCHAR(50)
+  contact_person : VARCHAR(100)
+  payment_terms : VARCHAR(100)
+  notes : VARCHAR(500)
   deleted : BOOLEAN
   created_at : TIMESTAMP
   updated_at : TIMESTAMP
@@ -36,9 +52,9 @@ entity "Product" as product {
   *id : BIGINT
   --
   reference : VARCHAR(50)
-  barcode : VARCHAR(50)
   name : VARCHAR(100)
   description : VARCHAR(500)
+  image : TEXT
   category : VARCHAR(50)
   unit_type : VARCHAR
   is_heavy_material : BOOLEAN
@@ -60,6 +76,17 @@ entity "ProductConditioning" as conditioning {
   unit_price : DECIMAL(19,3)
   created_at : TIMESTAMP
   updated_at : TIMESTAMP
+}
+
+entity "ProductCost" as product_cost {
+  *id : BIGINT
+  --
+  product_id : BIGINT
+  supplier_id : BIGINT
+  unit_cost : DECIMAL(19,3)
+  effective_date : DATE
+  notes : VARCHAR(500)
+  created_at : TIMESTAMP
 }
 
 entity "Document" as document {
@@ -149,11 +176,14 @@ client ||..o{ payment_receipt : "makes"
 client ||..o{ credit_history : "has"
 
 product ||..o{ conditioning : "has"
+product ||..o{ product_cost : "has cost history"
 product ||..o{ document_line : "appears in"
+
+supplier ||..o{ product_cost : "provides costs for"
 
 document ||..o{ document_line : "contains"
 document |o..o{ credit_history : "generates (credit)"
 
-payment_receipt |o..o{ credit_history : "generates"
+payment_receipt |o--|| credit_history : "generates"
 
 @enduml

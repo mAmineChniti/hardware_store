@@ -1,0 +1,212 @@
+@startuml Schéma Base de Données - Magasin de Matériaux
+' INOVEXAHUB - Système de Gestion Commerciale et Point de Vente (POS)
+' Sprint 1: Modélisation UML - Schéma Base de Données
+' Version: 1.0 (MVP)
+' Base de données: PostgreSQL
+
+skinparam linetype ortho
+skinparam entity {
+  BackgroundColor<<FK>> LightBlue
+  BorderColor<<FK>> Blue
+}
+
+' ============================================
+' TABLES
+' ============================================
+
+entity utilisateurs {
+  id BIGSERIAL PK
+  nom_utilisateur VARCHAR(50) UNIQUE
+  mot_de_passe VARCHAR
+  nom_complet VARCHAR(100)
+  rôle VARCHAR(20)
+  activé BOOLEAN
+  date_création TIMESTAMP
+  date_modification TIMESTAMP
+}
+
+entity clients {
+  id BIGSERIAL PK
+  nom VARCHAR(100)
+  téléphone VARCHAR(20)
+  email VARCHAR(100)
+  adresse VARCHAR(255)
+  numéro_matricule_fiscal VARCHAR(50)
+  limite_crédit DECIMAL(19,3)
+  dette_actuelle DECIMAL(19,3)
+  supprimé BOOLEAN
+  date_création TIMESTAMP
+  date_modification TIMESTAMP
+}
+
+entity fournisseurs {
+  id BIGSERIAL PK
+  nom VARCHAR(100)
+  téléphone VARCHAR(20)
+  email VARCHAR(100)
+  adresse VARCHAR(255)
+  numéro_matricule_fiscal VARCHAR(50)
+  personne_contact VARCHAR(100)
+  conditions_paiement VARCHAR(100)
+  notes VARCHAR(500)
+  supprimé BOOLEAN
+  date_création TIMESTAMP
+  date_modification TIMESTAMP
+}
+
+entity produits {
+  id BIGSERIAL PK
+  référence VARCHAR(50) UNIQUE
+  nom VARCHAR(100)
+  description VARCHAR(500)
+  image TEXT
+  catégorie VARCHAR(50)
+  type_unité VARCHAR(20)
+  est_matériau_lourd BOOLEAN
+  unité_base VARCHAR(20)
+  quantité_stock DECIMAL(19,3)
+  prix_moyen_achat DECIMAL(19,3)
+  prix_sur_place DECIMAL(19,3)
+  prix_livré DECIMAL(19,3)
+  date_création TIMESTAMP
+  date_modification TIMESTAMP
+}
+
+entity conditionnements_produits {
+  id BIGSERIAL PK
+  produit_id BIGINT FK
+  description VARCHAR(100)
+  quantité_par_unité DECIMAL(19,3)
+  prix_unitaire DECIMAL(19,3)
+  date_création TIMESTAMP
+  date_modification TIMESTAMP
+}
+
+entity coûts_produits {
+  id BIGSERIAL PK
+  produit_id BIGINT FK
+  fournisseur_id BIGINT FK
+  coût_unitaire DECIMAL(19,3)
+  date_effective DATE
+  notes VARCHAR(500)
+  date_création TIMESTAMP
+}
+
+entity documents {
+  id BIGSERIAL PK
+  numéro_document VARCHAR(50) UNIQUE
+  date TIMESTAMP
+  type_document VARCHAR(20)
+  statut VARCHAR(20)
+  client_id BIGINT FK
+  utilisateur_id BIGINT FK
+  total_hors_taxe DECIMAL(19,3)
+  taux_tva DECIMAL(5,2)
+  total_tva DECIMAL(19,3)
+  total_ttc DECIMAL(19,3)
+  frais_transport DECIMAL(19,3)
+  droit_timbre DECIMAL(19,3)
+  est_vente_crédit BOOLEAN
+  date_création TIMESTAMP
+  date_modification TIMESTAMP
+}
+
+entity lignes_documents {
+  id BIGSERIAL PK
+  document_id BIGINT FK
+  produit_id BIGINT FK
+  numéro_ligne INTEGER
+  description_conditionnement VARCHAR(100)
+  quantité DECIMAL(19,3)
+  prix_unitaire DECIMAL(19,3)
+  total_ligne_hors_taxe DECIMAL(19,3)
+  total_ligne_ttc DECIMAL(19,3)
+  est_livré BOOLEAN
+  date_création TIMESTAMP
+  date_modification TIMESTAMP
+}
+
+entity reçus_paiements {
+  id BIGSERIAL PK
+  numéro_reçu VARCHAR(50) UNIQUE
+  client_id BIGINT FK
+  utilisateur_id BIGINT FK
+  montant_payé DECIMAL(19,3)
+  date_paiement TIMESTAMP
+  mode_paiement VARCHAR(20)
+  dette_précédente DECIMAL(19,3)
+  nouvelle_dette DECIMAL(19,3)
+  date_création TIMESTAMP
+  date_modification TIMESTAMP
+}
+
+entity historique_crédit {
+  id BIGSERIAL PK
+  client_id BIGINT FK
+  document_id BIGINT FK
+  reçu_paiement_id BIGINT FK
+  type_transaction VARCHAR(20)
+  montant DECIMAL(19,3)
+  solde_courant DECIMAL(19,3)
+  supprimé BOOLEAN
+  date_entrée TIMESTAMP
+}
+
+entity journal_audit {
+  id BIGSERIAL PK
+  nom_utilisateur VARCHAR(50)
+  action VARCHAR(100)
+  type_entité VARCHAR(50)
+  id_entité BIGINT
+  détails TEXT
+  horodatage TIMESTAMP
+}
+
+' ============================================
+' RELATIONS CLÉS ÉTRANGÈRES
+' ============================================
+
+conditionnements_produits }o--|| produits : "produit_id"
+coûts_produits }o--|| produits : "produit_id"
+coûts_produits }o--o| fournisseurs : "fournisseur_id"
+documents }o--|| clients : "client_id"
+documents }o--|| utilisateurs : "utilisateur_id"
+lignes_documents }o--|| documents : "document_id"
+lignes_documents }o--o| produits : "produit_id"
+reçus_paiements }o--|| clients : "client_id"
+reçus_paiements }o--o| utilisateurs : "utilisateur_id"
+historique_crédit }o--|| clients : "client_id"
+historique_crédit }o--o| documents : "document_id"
+historique_crédit }o--|| reçus_paiements : "reçu_paiement_id"
+
+' ============================================
+' NOTES
+' ============================================
+
+note right of produits
+  - code-barres indexé pour scan POS rapide (< 500ms)
+  - Supporte quantités décimales pour POIDS, LONGUEUR, VOLUME
+  - Double tarification pour matériaux lourds (Sur Place / Livré)
+end note
+
+note right of coûts_produits
+  - Historique des coûts unitaires par date
+  - Suit les fluctuations de coûts dans le temps
+  - Permet des calculs de marge précis
+  - Plusieurs fournisseurs par produit
+end note
+
+note right of documents
+  - Héritage SINGLE_TABLE: DEVIS, BON_LIVRAISON, FACTURE
+  - frais_transport par défaut: 10.000 DT (BL)
+  - droit_timbre par défaut: 1.000 DT (FACTURE)
+  - taux_tva par défaut: 19.00%
+end note
+
+note right of historique_crédit
+  - Table d'audit IMMUTABLE
+  - Suppression douce uniquement (drapeau supprimé)
+  - montant: Positif pour augmentation dette, Négatif pour paiements
+end note
+
+@enduml

@@ -10,8 +10,10 @@ DROP TABLE IF EXISTS credit_history CASCADE;
 DROP TABLE IF EXISTS payment_receipts CASCADE;
 DROP TABLE IF EXISTS document_lines CASCADE;
 DROP TABLE IF EXISTS documents CASCADE;
+DROP TABLE IF EXISTS product_costs CASCADE;
 DROP TABLE IF EXISTS product_conditionings CASCADE;
 DROP TABLE IF EXISTS products CASCADE;
+DROP TABLE IF EXISTS suppliers CASCADE;
 DROP TABLE IF EXISTS clients CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS audit_logs CASCADE;
@@ -44,7 +46,7 @@ CREATE TABLE clients (
     phone VARCHAR(20),
     email VARCHAR(100),
     address VARCHAR(255),
-    tin VARCHAR(50), -- Matricule fiscal
+    tax_identification_number VARCHAR(50), -- Matricule fiscal
     credit_limit DECIMAL(19,3) NOT NULL DEFAULT 0.000, -- plafond_credit_autorise
     current_debt DECIMAL(19,3) NOT NULL DEFAULT 0.000, -- Dette_Actuelle
     deleted BOOLEAN NOT NULL DEFAULT FALSE,
@@ -54,8 +56,32 @@ CREATE TABLE clients (
 
 -- Index on name for search
 CREATE INDEX idx_clients_name ON clients(name);
--- Index on tin for tax identification lookup
-CREATE INDEX idx_clients_tin ON clients(tin);
+-- Index on tax_identification_number for tax identification lookup
+CREATE INDEX idx_clients_tax_identification_number ON clients(tax_identification_number);
+
+-- ============================================
+-- TABLE: suppliers
+-- Section 3.5: Module de Gestion des Fournisseurs
+-- ============================================
+CREATE TABLE suppliers (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20),
+    email VARCHAR(100),
+    address VARCHAR(255),
+    tax_identification_number VARCHAR(50), -- Matricule fiscal
+    contact_person VARCHAR(100),
+    payment_terms VARCHAR(100),
+    notes VARCHAR(500),
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+-- Index on name for search
+CREATE INDEX idx_suppliers_name ON suppliers(name);
+-- Index on tax_identification_number for tax identification lookup
+CREATE INDEX idx_suppliers_tax_identification_number ON suppliers(tax_identification_number);
 
 -- ============================================
 -- TABLE: products
@@ -64,9 +90,9 @@ CREATE INDEX idx_clients_tin ON clients(tin);
 CREATE TABLE products (
     id BIGSERIAL PRIMARY KEY,
     reference VARCHAR(50) UNIQUE,
-    barcode VARCHAR(50) UNIQUE, -- Indexé pour lecture code-barres rapide
     name VARCHAR(100) NOT NULL,
     description VARCHAR(500),
+    image TEXT, -- Base64 encoded image string
     category VARCHAR(50),
     unit_type VARCHAR(20) NOT NULL CHECK (unit_type IN ('UNITARY', 'WEIGHT', 'LENGTH', 'VOLUME')),
     is_heavy_material BOOLEAN NOT NULL DEFAULT FALSE,
@@ -79,8 +105,6 @@ CREATE TABLE products (
     updated_at TIMESTAMP
 );
 
--- Index on barcode for fast POS scanning (< 500ms requirement)
-CREATE INDEX idx_products_barcode ON products(barcode);
 -- Index on reference for internal lookup
 CREATE INDEX idx_products_reference ON products(reference);
 -- Index on name for predictive search
@@ -105,6 +129,29 @@ CREATE TABLE product_conditionings (
 
 -- Index on product_id for fast lookup
 CREATE INDEX idx_product_conditionings_product_id ON product_conditionings(product_id);
+
+-- ============================================
+-- TABLE: product_costs
+-- Section 3.1.3: Historique des Coûts Unitaires par Date
+-- ============================================
+CREATE TABLE product_costs (
+    id BIGSERIAL PRIMARY KEY,
+    product_id BIGINT NOT NULL,
+    unit_cost DECIMAL(19,3) NOT NULL,
+    effective_date DATE NOT NULL,
+    supplier_id BIGINT,
+    notes VARCHAR(500),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+);
+
+-- Index on product_id for fast lookup
+CREATE INDEX idx_product_costs_product_id ON product_costs(product_id);
+-- Index on effective_date for date-based queries
+CREATE INDEX idx_product_costs_effective_date ON product_costs(effective_date);
+-- Composite index for product + date queries
+CREATE INDEX idx_product_costs_product_date ON product_costs(product_id, effective_date);
 
 -- ============================================
 -- TABLE: documents
@@ -183,11 +230,19 @@ CREATE TABLE payment_receipts (
     payment_method VARCHAR(20) NOT NULL CHECK (payment_method IN ('CASH', 'TRANSFER', 'CHECK', 'CREDIT')),
     previous_debt DECIMAL(19,3), -- Snapshot before payment
     new_debt DECIMAL(19,3), -- Snapshot after payment
+    credit_history_id BIGINT UNIQUE, -- Generated credit history entry
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP,
     FOREIGN KEY (client_id) REFERENCES clients(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+-- Add foreign key constraints after table creation
+ALTER TABLE payment_receipts ADD CONSTRAINT fk_payment_receipts_credit_history 
+    FOREIGN KEY (credit_history_id) REFERENCES credit_history(id) DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE credit_history ADD CONSTRAINT fk_credit_history_payment_receipt 
+    FOREIGN KEY (payment_receipt_id) REFERENCES payment_receipts(id) DEFERRABLE INITIALLY DEFERRED;
 
 -- Index on receipt_number for fast lookup
 CREATE INDEX idx_payment_receipts_receipt_number ON payment_receipts(receipt_number);
@@ -254,11 +309,11 @@ INSERT INTO clients (name, phone, email, address, tin, credit_limit, current_deb
 ('ABC Construction SARL', '+216 71 123 456', 'contact@abc.tn', '123 Rue de l''Industrie, Tunis', '1234567/A/M/000', 5000.000, 0.000);
 
 -- Insert sample products
-INSERT INTO products (reference, barcode, name, description, category, unit_type, is_heavy_material, base_unit, stock_quantity, average_purchase_price, price_on_site, price_delivered) VALUES
-('PROD-001', '3001234567890', 'Marteau Professionnel', 'Marteau à tête bombée, manche en fibre de verre', 'Outillage', 'UNITARY', FALSE, 'pièce', 50.000, 25.000, 35.000, NULL),
-('PROD-002', '3001234567891', 'Fil Électrique 2.5mm²', 'Fil électrique rigide, couleur rouge, vendu au mètre', 'Électricité', 'LENGTH', FALSE, 'm', 500.000, 0.800, 1.500, NULL),
-('PROD-003', '3001234567892', 'Sac de Ciment 50Kg', 'Ciment Portland CPJ-35', 'Matériaux', 'WEIGHT', TRUE, 'sac', 200.000, 12.000, 14.500, 15.000),
-('PROD-004', '3001234567893', 'Brique de construction', 'Brique rouge standard 20x10x5cm', 'Matériaux', 'UNITARY', TRUE, 'pièce', 5000.000, 0.500, 0.720, 0.780);
+INSERT INTO products (reference, name, description, category, unit_type, is_heavy_material, base_unit, stock_quantity, average_purchase_price, price_on_site, price_delivered) VALUES
+('PROD-001', 'Marteau Professionnel', 'Marteau à tête bombée, manche en fibre de verre', 'Outillage', 'UNITARY', FALSE, 'pièce', 50.000, 25.000, 35.000, NULL),
+('PROD-002', 'Fil Électrique 2.5mm²', 'Fil électrique rigide, couleur rouge, vendu au mètre', 'Électricité', 'LENGTH', FALSE, 'm', 500.000, 0.800, 1.500, NULL),
+('PROD-003', 'Sac de Ciment 50Kg', 'Ciment Portland CPJ-35', 'Matériaux', 'WEIGHT', TRUE, 'sac', 200.000, 12.000, 14.500, 15.000),
+('PROD-004', 'Brique de construction', 'Brique rouge standard 20x10x5cm', 'Matériaux', 'UNITARY', TRUE, 'pièce', 5000.000, 0.500, 0.720, 0.780);
 
 -- Insert sample product conditioning
 INSERT INTO product_conditionings (product_id, description, quantity_per_unit, unit_price) VALUES

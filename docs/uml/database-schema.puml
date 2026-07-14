@@ -31,9 +31,24 @@ entity clients {
   phone VARCHAR(20)
   email VARCHAR(100)
   address VARCHAR(255)
-  tin VARCHAR(50)
+  tax_identification_number VARCHAR(50)
   credit_limit DECIMAL(19,3)
   current_debt DECIMAL(19,3)
+  deleted BOOLEAN
+  created_at TIMESTAMP
+  updated_at TIMESTAMP
+}
+
+entity suppliers {
+  id BIGSERIAL PK
+  name VARCHAR(100)
+  phone VARCHAR(20)
+  email VARCHAR(100)
+  address VARCHAR(255)
+  tax_identification_number VARCHAR(50)
+  contact_person VARCHAR(100)
+  payment_terms VARCHAR(100)
+  notes VARCHAR(500)
   deleted BOOLEAN
   created_at TIMESTAMP
   updated_at TIMESTAMP
@@ -42,9 +57,9 @@ entity clients {
 entity products {
   id BIGSERIAL PK
   reference VARCHAR(50) UNIQUE
-  barcode VARCHAR(50) UNIQUE
   name VARCHAR(100)
   description VARCHAR(500)
+  image TEXT
   category VARCHAR(50)
   unit_type VARCHAR(20)
   is_heavy_material BOOLEAN
@@ -65,6 +80,16 @@ entity product_conditionings {
   unit_price DECIMAL(19,3)
   created_at TIMESTAMP
   updated_at TIMESTAMP
+}
+
+entity product_costs {
+  id BIGSERIAL PK
+  product_id BIGINT FK
+  supplier_id BIGINT FK
+  unit_cost DECIMAL(19,3)
+  effective_date DATE
+  notes VARCHAR(500)
+  created_at TIMESTAMP
 }
 
 entity documents {
@@ -142,6 +167,8 @@ entity audit_logs {
 ' ============================================
 
 product_conditionings }o--|| products : "product_id"
+product_costs }o--|| products : "product_id"
+product_costs }o--o| suppliers : "supplier_id"
 documents }o--|| clients : "client_id"
 documents }o--|| users : "user_id"
 document_lines }o--|| documents : "document_id"
@@ -150,7 +177,7 @@ payment_receipts }o--|| clients : "client_id"
 payment_receipts }o--o| users : "user_id"
 credit_history }o--|| clients : "client_id"
 credit_history }o--o| documents : "document_id"
-credit_history }o--o| payment_receipts : "payment_receipt_id"
+credit_history }o--|| payment_receipts : "payment_receipt_id"
 
 ' ============================================
 ' NOTES
@@ -160,6 +187,13 @@ note right of products
   - barcode indexed for fast POS scanning (< 500ms)
   - Supports decimal quantities for WEIGHT, LENGTH, VOLUME
   - Double pricing for heavy materials (Sur Place / Livré)
+end note
+
+note right of product_costs
+  - Date-based unit cost history
+  - Tracks cost fluctuations over time
+  - Enables accurate margin calculations
+  - Multiple suppliers per product
 end note
 
 note right of documents
