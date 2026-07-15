@@ -136,6 +136,7 @@ entity payment_receipts {
   payment_method VARCHAR(20)
   previous_debt DECIMAL(19,3)
   new_debt DECIMAL(19,3)
+  credit_history_id BIGINT FK
   created_at TIMESTAMP
   updated_at TIMESTAMP
 }
@@ -184,9 +185,10 @@ credit_history }o--|| payment_receipts : "payment_receipt_id"
 ' ============================================
 
 note right of products
-  - barcode indexed for fast POS scanning (< 500ms)
+  - reference indexed for fast POS scanning (< 500ms)
   - Supports decimal quantities for WEIGHT, LENGTH, VOLUME
   - Double pricing for heavy materials (Sur Place / Livré)
+  - image stored as base64 encoded string
 end note
 
 note right of product_costs

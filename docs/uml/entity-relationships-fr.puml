@@ -136,6 +136,7 @@ entity "ReçuPaiement" as reçu_paiement {
   mode_paiement : VARCHAR
   dette_précédente : DECIMAL(19,3)
   nouvelle_dette : DECIMAL(19,3)
+  historique_crédit_id : BIGINT
   date_création : TIMESTAMP
   date_modification : TIMESTAMP
 }
