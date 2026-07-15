@@ -136,6 +136,7 @@ entity reçus_paiements {
   mode_paiement VARCHAR(20)
   dette_précédente DECIMAL(19,3)
   nouvelle_dette DECIMAL(19,3)
+  historique_crédit_id BIGINT FK
   date_création TIMESTAMP
   date_modification TIMESTAMP
 }
@@ -184,9 +185,10 @@ historique_crédit }o--|| reçus_paiements : "reçu_paiement_id"
 ' ============================================
 
 note right of produits
-  - code-barres indexé pour scan POS rapide (< 500ms)
+  - référence indexée pour scan POS rapide (< 500ms)
   - Supporte quantités décimales pour POIDS, LONGUEUR, VOLUME
   - Double tarification pour matériaux lourds (Sur Place / Livré)
+  - image stockée comme chaîne base64
 end note
 
 note right of coûts_produits

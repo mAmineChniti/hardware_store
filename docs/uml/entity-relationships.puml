@@ -136,6 +136,7 @@ entity "PaymentReceipt" as payment_receipt {
   payment_method : VARCHAR
   previous_debt : DECIMAL(19,3)
   new_debt : DECIMAL(19,3)
+  credit_history_id : BIGINT
   created_at : TIMESTAMP
   updated_at : TIMESTAMP
 }
