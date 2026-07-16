@@ -152,6 +152,8 @@ class Document {
   - BigDecimal transportFee
   - BigDecimal stampDuty
   - Boolean isCreditSale
+  - Long convertedToInvoiceId
+  - Long sourceDeliveryNoteId
   - LocalDateTime createdAt
   - LocalDateTime updatedAt
   + onCreate()

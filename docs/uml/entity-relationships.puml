@@ -105,6 +105,8 @@ entity "Document" as document {
   transport_fee : DECIMAL(19,3)
   stamp_duty : DECIMAL(19,3)
   is_credit_sale : BOOLEAN
+  converted_to_invoice_id : BIGINT
+  source_delivery_note_id : BIGINT
   created_at : TIMESTAMP
   updated_at : TIMESTAMP
 }
@@ -118,6 +120,7 @@ entity "DocumentLine" as document_line {
   conditioning_description : VARCHAR(100)
   quantity : DECIMAL(19,3)
   unit_price : DECIMAL(19,3)
+  unit_cost : DECIMAL(19,3)
   total_line_excluding_tax : DECIMAL(19,3)
   total_line_including_tax : DECIMAL(19,3)
   is_delivered : BOOLEAN

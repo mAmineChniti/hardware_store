@@ -26,6 +26,9 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
 
   List<Document> findByDateBetween(LocalDateTime startDate, LocalDateTime endDate);
 
+  List<Document> findByDateGreaterThanEqualAndDateLessThan(
+      LocalDateTime startDate, LocalDateTime endDate);
+
   @Query("SELECT d FROM Document d WHERE d.client.id = :clientId AND d.isCreditSale = true")
   List<Document> findCreditSalesByClient(@Param("clientId") Long clientId);
 
@@ -36,4 +39,13 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
   default List<Document> findValidatedInvoices() {
     return findDocumentsByStatusAndType(DocumentStatus.VALIDATED, DocumentType.INVOICE);
   }
+
+  @Query(value = "SELECT nextval('seq_quote_number')", nativeQuery = true)
+  Long getNextQuoteSequence();
+
+  @Query(value = "SELECT nextval('seq_delivery_note_number')", nativeQuery = true)
+  Long getNextDeliveryNoteSequence();
+
+  @Query(value = "SELECT nextval('seq_invoice_number')", nativeQuery = true)
+  Long getNextInvoiceSequence();
 }

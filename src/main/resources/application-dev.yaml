@@ -8,25 +8,25 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:validate}
-    show-sql: ${SPRING_JPA_SHOW_SQL:true}
+      ddl-auto: update
+    show-sql: true
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
   h2:
     console:
-      enabled: false
+      enabled: true
 
 logging:
   level:
-    org.springframework.boot: INFO
-    org.hibernate.SQL: ${LOGGING_HIBERNATE_SQL:INFO}
-    org.hibernate.type.descriptor.sql.BasicBinder: ${LOGGING_HIBERNATE_BINDER:INFO}
+    org.springframework.boot: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
 
 server:
   port: ${SERVER_PORT:8080}
 
 jwt:
-  secret: ${JWT_SECRET}
+  secret: my-super-secret-jwt-key-for-development-only-change-in-production
   expiration: ${JWT_EXPIRATION:86400000}

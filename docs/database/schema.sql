@@ -18,6 +18,11 @@ DROP TABLE IF EXISTS clients CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS audit_logs CASCADE;
 
+-- Create sequences for document number generation (preserving existing state)
+CREATE SEQUENCE IF NOT EXISTS seq_quote_number START 1 INCREMENT 1;
+CREATE SEQUENCE IF NOT EXISTS seq_delivery_note_number START 1 INCREMENT 1;
+CREATE SEQUENCE IF NOT EXISTS seq_invoice_number START 1 INCREMENT 1;
+
 -- ============================================
 -- TABLE: users
 -- Section 2: Gestion des Utilisateurs et Droits d'Accès
@@ -173,6 +178,8 @@ CREATE TABLE documents (
     transport_fee DECIMAL(19,3) NOT NULL DEFAULT 10.000, -- Default for BL
     stamp_duty DECIMAL(19,3) NOT NULL DEFAULT 1.000, -- Default for Invoices
     is_credit_sale BOOLEAN NOT NULL DEFAULT FALSE,
+    converted_to_invoice_id BIGINT,
+    source_delivery_note_id BIGINT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP,
     FOREIGN KEY (client_id) REFERENCES clients(id),
@@ -202,6 +209,7 @@ CREATE TABLE document_lines (
     conditioning_description VARCHAR(100), -- Snapshot of how product was sold
     quantity DECIMAL(19,3),
     unit_price DECIMAL(19,3),
+    unit_cost DECIMAL(19,3) DEFAULT 0.000, -- Cost per unit snapshot at sale time for margin calculation
     total_line_excluding_tax DECIMAL(19,3) NOT NULL DEFAULT 0.000,
     total_line_including_tax DECIMAL(19,3) NOT NULL DEFAULT 0.000,
     is_delivered BOOLEAN NOT NULL DEFAULT FALSE,

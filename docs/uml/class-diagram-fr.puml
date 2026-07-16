@@ -152,6 +152,8 @@ class Document {
   - BigDecimal fraisTransport
   - BigDecimal droitTimbre
   - Boolean estVenteCrédit
+  - Long convertiEnFactureId
+  - Long sourceBonLivraisonId
   - LocalDateTime dateCréation
   - LocalDateTime dateModification
   + onCreate()
