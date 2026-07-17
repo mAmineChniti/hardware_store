@@ -257,10 +257,94 @@ http://localhost:8080/swagger-ui.html
 
 ### Endpoints Principaux
 
-#### Authentification
-- `POST /api/auth/login` - Connexion utilisateur
-- `POST /api/auth/register` - Inscription utilisateur
-- `PUT /api/auth/users/{id}` - Mise à jour utilisateur
+#### Authentification (`/api/auth`)
+- `POST /api/auth/login` - Connexion utilisateur (retourne JWT token)
+- `POST /api/auth/register` - Inscription utilisateur (crée compte EMPLOYEE par défaut)
+- `PUT /api/auth/users/{id}` - Mise à jour utilisateur (requiert authentification)
+- `DELETE /api/auth/users/{id}` - Suppression utilisateur (requiert authentification)
+
+#### Clients (`/api/clients`)
+- `GET /api/clients` - Récupérer tous les clients actifs
+- `GET /api/clients/{id}` - Récupérer un client par ID
+- `GET /api/clients/tax-id/{taxId}` - Récupérer un client par matricule fiscal
+- `POST /api/clients` - Créer un nouveau client (ADMIN ou EMPLOYEE)
+- `PUT /api/clients/{id}` - Mettre à jour un client (ADMIN ou EMPLOYEE)
+- `DELETE /api/clients/{id}` - Supprimer un client (soft delete, ADMIN uniquement)
+- `GET /api/clients/{id}/credit-limit-check` - Vérifier si une vente dépasserait la limite de crédit
+- `GET /api/clients/{id}/credit-history` - Récupérer l'historique de crédit complet
+- `GET /api/clients/{id}/credit-history/active` - Récupérer l'historique de crédit actif
+- `GET /api/clients/{id}/payments` - Récupérer tous les reçus de paiement
+- `POST /api/clients/{id}/payments` - Traiter un paiement (ADMIN ou EMPLOYEE)
+- `GET /api/clients/debtors` - Récupérer les clients avec dette
+- `GET /api/clients/near-limit` - Récupérer les clients proches de leur limite de crédit
+
+#### Produits (`/api/products`)
+- `GET /api/products` - Récupérer tous les produits
+- `GET /api/products/{id}` - Récupérer un produit par ID
+- `GET /api/products/reference/{reference}` - Récupérer un produit par référence
+- `POST /api/products` - Créer un nouveau produit (ADMIN ou EMPLOYEE)
+- `PUT /api/products/{id}` - Mettre à jour un produit (ADMIN ou EMPLOYEE)
+- `DELETE /api/products/{id}` - Supprimer un produit (ADMIN uniquement)
+- `GET /api/products/search` - Rechercher des produits par mot-clé
+- `GET /api/products/category/{category}` - Récupérer les produits par catégorie
+- `GET /api/products/heavy-materials` - Récupérer les matériaux lourds (tarification double)
+- `GET /api/products/low-stock` - Récupérer les produits avec stock faible
+- `GET /api/products/{productId}/conditionings` - Récupérer les conditionnements d'un produit
+- `POST /api/products/{productId}/conditionings` - Ajouter un conditionnement (ADMIN ou EMPLOYEE)
+- `PUT /api/products/conditionings/{id}` - Mettre à jour un conditionnement (ADMIN ou EMPLOYEE)
+- `DELETE /api/products/conditionings/{id}` - Supprimer un conditionnement (ADMIN uniquement)
+- `GET /api/products/{productId}/costs` - Récupérer l'historique des coûts
+- `GET /api/products/{productId}/costs/current` - Récupérer le coût actuel
+- `POST /api/products/{productId}/costs` - Ajouter un coût (met à jour PAMP, ADMIN ou EMPLOYEE)
+- `GET /api/products/{productId}/costs/{date}` - Récupérer le coût pour une date spécifique
+- `GET /api/products/{productId}/costs/between` - Récupérer les coûts entre deux dates
+- `DELETE /api/products/costs/{id}` - Supprimer un coût (ADMIN uniquement)
+- `POST /api/products/{productId}/stock` - Mettre à jour la quantité en stock (ADMIN ou EMPLOYEE)
+
+#### Documents (`/api/documents`)
+- `GET /api/documents` - Récupérer tous les documents
+- `GET /api/documents/{id}` - Récupérer un document par ID
+- `GET /api/documents/number/{documentNumber}` - Récupérer un document par numéro
+- `POST /api/documents` - Créer un nouveau document (Devis, BL, Facture) (ADMIN ou EMPLOYEE)
+- `PUT /api/documents/{id}` - Mettre à jour un document (ADMIN ou EMPLOYEE)
+- `DELETE /api/documents/{id}` - Supprimer un document (ADMIN uniquement)
+- `GET /api/documents/{id}/lines` - Récupérer les lignes d'un document
+- `POST /api/documents/{id}/lines` - Ajouter une ligne à un document (ADMIN ou EMPLOYEE)
+- `PUT /api/documents/lines/{lineId}` - Mettre à jour une ligne (ADMIN ou EMPLOYEE)
+- `DELETE /api/documents/lines/{lineId}` - Supprimer une ligne (ADMIN ou EMPLOYEE)
+- `POST /api/documents/{id}/validate` - Valider un document (BROUILLON -> VALIDÉ) (ADMIN ou EMPLOYEE)
+- `POST /api/documents/{id}/cancel` - Annuler un document (ADMIN ou EMPLOYEE)
+- `POST /api/documents/{id}/convert-to-bl` - Convertir Devis en Bon de Livraison (ADMIN ou EMPLOYEE)
+- `POST /api/documents/{id}/convert-to-invoice` - Convertir Bon de Livraison en Facture (ADMIN ou EMPLOYEE)
+- `GET /api/documents/client/{clientId}` - Récupérer les documents d'un client
+- `GET /api/documents/user/{userId}` - Récupérer les documents créés par un utilisateur
+- `GET /api/documents/type/{documentType}` - Récupérer les documents par type
+- `GET /api/documents/status/{status}` - Récupérer les documents par statut
+- `GET /api/documents/client/{clientId}/credit-sales` - Récupérer les ventes au crédit d'un client
+- `GET /api/documents/{id}/pdf` - Générer le PDF du document
+
+#### Fournisseurs (`/api/suppliers`)
+- `GET /api/suppliers` - Récupérer tous les fournisseurs actifs
+- `GET /api/suppliers/{id}` - Récupérer un fournisseur par ID
+- `GET /api/suppliers/tax-id/{taxId}` - Récupérer un fournisseur par matricule fiscal
+- `GET /api/suppliers/search` - Rechercher des fournisseurs par nom
+- `POST /api/suppliers` - Créer un nouveau fournisseur (ADMIN ou EMPLOYEE)
+- `PUT /api/suppliers/{id}` - Mettre à jour un fournisseur (ADMIN ou EMPLOYEE)
+- `DELETE /api/suppliers/{id}` - Supprimer un fournisseur (soft delete, ADMIN uniquement)
+
+#### Rapports (`/api/reports`) - ADMIN uniquement
+- `GET /api/reports/revenue` - Statistiques de chiffre d'affaires pour une période
+- `GET /api/reports/revenue/daily` - Chiffre d'affaires quotidien pour une période
+- `GET /api/reports/margin` - Statistiques de marge pour une période
+- `GET /api/reports/debtors` - Rapport des débiteurs
+- `GET /api/reports/debtors/near-limit` - Clients proches de leur limite de crédit
+- `GET /api/reports/products/top-revenue` - Top produits par chiffre d'affaires
+- `GET /api/reports/products/top-margin` - Top produits par marge
+- `GET /api/reports/stock` - Rapport de stock
+- `GET /api/reports/exports/sales-journal/csv` - Exporter le journal des ventes en CSV
+- `GET /api/reports/exports/sales-journal/excel` - Exporter le journal des ventes en Excel
+- `GET /api/reports/exports/stock/csv` - Exporter le rapport de stock en CSV
+- `GET /api/reports/exports/stock/excel` - Exporter le rapport de stock en Excel
 
 ## 🧪 Tests
 
