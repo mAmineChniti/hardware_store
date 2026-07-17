@@ -9,10 +9,16 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -30,7 +36,9 @@ import tn.inovexahub.hardware_store.enums.UnitType;
  * with validation flag)
  */
 @Entity
-@Table(name = "products")
+@Table(
+    name = "products",
+    indexes = {@Index(name = "idx_product_reference", columnList = "reference")})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -41,10 +49,14 @@ public class Product {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
+  @Version private Long version;
+
   @Column(name = "reference", unique = true, length = 50)
+  @NotBlank(message = "Reference is required")
   private String reference;
 
   @Column(name = "name", nullable = false, length = 100)
+  @NotBlank(message = "Product name is required")
   private String name;
 
   @Column(name = "description", length = 500)
@@ -58,25 +70,33 @@ public class Product {
 
   @Enumerated(EnumType.STRING)
   @Column(name = "unit_type", nullable = false)
+  @NotNull(message = "Unit type is required")
   private UnitType unitType;
 
   @Column(name = "is_heavy_material", nullable = false)
+  @NotNull(message = "Heavy material flag is required")
   private Boolean isHeavyMaterial = false;
 
   @Column(name = "base_unit", length = 20)
   private String baseUnit; // e.g., "m", "kg", "piece"
 
   @Column(name = "stock_quantity", precision = 19, scale = 3)
+  @NotNull(message = "Stock quantity is required")
+  @PositiveOrZero(message = "Stock quantity cannot be negative")
   private Double stockQuantity = 0.0;
 
   @Column(name = "average_purchase_price", precision = 19, scale = 3)
+  @NotNull(message = "Average purchase price is required")
+  @DecimalMin(value = "0.0", message = "Average purchase price cannot be negative")
   private BigDecimal averagePurchasePrice = BigDecimal.ZERO; // PAMP for margin calculation
 
   @Column(name = "price_on_site", precision = 19, scale = 3)
+  @DecimalMin(value = "0.0", message = "Price on site cannot be negative")
   private BigDecimal
       priceOnSite; // Prix de Vente Sur Place (nullable, used if isHeavyMaterial = true)
 
   @Column(name = "price_delivered", precision = 19, scale = 3)
+  @DecimalMin(value = "0.0", message = "Price delivered cannot be negative")
   private BigDecimal
       priceDelivered; // Prix de Vente Livré (nullable, used if isHeavyMaterial = true)
 

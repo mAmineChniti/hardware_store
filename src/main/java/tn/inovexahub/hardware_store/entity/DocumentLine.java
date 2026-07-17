@@ -53,6 +53,9 @@ public class DocumentLine {
   @Column(name = "unit_price", precision = 19, scale = 3)
   private BigDecimal unitPrice; // Price per unit applied at sale time
 
+  @Column(name = "unit_cost", precision = 19, scale = 3)
+  private BigDecimal unitCost; // Cost per unit snapshot at sale time for margin calculation
+
   @Column(name = "total_line_excluding_tax", precision = 19, scale = 3)
   private BigDecimal totalLineExcludingTax = BigDecimal.ZERO;
 

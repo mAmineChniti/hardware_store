@@ -13,6 +13,8 @@ public interface ClientRepository extends JpaRepository<Client, Long> {
 
   Optional<Client> findByTaxIdentificationNumber(String taxIdentificationNumber);
 
+  Optional<Client> findByIdAndDeletedFalse(Long id);
+
   List<Client> findByDeletedFalseOrderByCurrentDebtDesc();
 
   @Query(

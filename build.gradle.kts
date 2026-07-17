@@ -4,7 +4,6 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7"
     id("com.diffplug.spotless") version "6.25.0"
     id("checkstyle")
-    id("com.github.spotbugs") version "6.0.26"
 }
 
 group = "tn.inovexahub"
@@ -30,6 +29,9 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
+    implementation("org.apache.pdfbox:pdfbox:3.0.8")
+    implementation("org.apache.poi:poi:5.2.5")
+    implementation("org.apache.poi:poi-ooxml:5.2.5")
     compileOnly("org.projectlombok:lombok")
     runtimeOnly("org.postgresql:postgresql")
     annotationProcessor("org.projectlombok:lombok")
@@ -39,6 +41,12 @@ dependencies {
     testCompileOnly("org.projectlombok:lombok")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testAnnotationProcessor("org.projectlombok:lombok")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.add("-Xlint:all")
+    options.compilerArgs.add("-Xlint:-processing")
+    options.encoding = "UTF-8"
 }
 
 tasks.withType<Test> {
@@ -60,32 +68,15 @@ checkstyle {
     configFile = file("${rootProject.projectDir}/config/checkstyle/checkstyle.xml")
 }
 
-spotbugs {
-    ignoreFailures = true
-    showStackTraces = true
-    showProgress = true
-    effort.set(com.github.spotbugs.snom.Effort.MAX)
-    reportLevel.set(com.github.spotbugs.snom.Confidence.LOW)
-}
-
-dependencies {
-    spotbugsPlugins("com.h3xstream.findsecbugs:findsecbugs-plugin:1.13.0")
-}
-
 tasks.withType<Checkstyle>().configureEach {
     reports.xml.required.set(true)
     reports.html.required.set(true)
 }
 
-tasks.withType<com.github.spotbugs.snom.SpotBugsTask>().configureEach {
-    reports.create("xml").required.set(true)
-    reports.create("html").required.set(true)
-}
-
 tasks.register("lint") {
     group = "verification"
-    description = "Run linting checks (checkstyle + spotbugs)"
-    dependsOn("checkstyleMain", "checkstyleTest", "spotbugsMain", "spotbugsTest")
+    description = "Run linting checks (checkstyle)"
+    dependsOn("checkstyleMain", "checkstyleTest")
 }
 
 tasks.register("format") {

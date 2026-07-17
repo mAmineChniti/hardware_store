@@ -107,6 +107,8 @@ entity documents {
   frais_transport DECIMAL(19,3)
   droit_timbre DECIMAL(19,3)
   est_vente_crédit BOOLEAN
+  converti_en_facture_id BIGINT
+  source_bon_livraison_id BIGINT
   date_création TIMESTAMP
   date_modification TIMESTAMP
 }
@@ -119,6 +121,7 @@ entity lignes_documents {
   description_conditionnement VARCHAR(100)
   quantité DECIMAL(19,3)
   prix_unitaire DECIMAL(19,3)
+  coût_unitaire DECIMAL(19,3)
   total_ligne_hors_taxe DECIMAL(19,3)
   total_ligne_ttc DECIMAL(19,3)
   est_livré BOOLEAN
