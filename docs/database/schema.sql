@@ -15,6 +15,7 @@ DROP TABLE IF EXISTS product_conditionings CASCADE;
 DROP TABLE IF EXISTS products CASCADE;
 DROP TABLE IF EXISTS suppliers CASCADE;
 DROP TABLE IF EXISTS clients CASCADE;
+DROP TABLE IF EXISTS refresh_tokens CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS audit_logs CASCADE;
 
@@ -22,6 +23,7 @@ DROP TABLE IF EXISTS audit_logs CASCADE;
 CREATE SEQUENCE IF NOT EXISTS seq_quote_number START 1 INCREMENT 1;
 CREATE SEQUENCE IF NOT EXISTS seq_delivery_note_number START 1 INCREMENT 1;
 CREATE SEQUENCE IF NOT EXISTS seq_invoice_number START 1 INCREMENT 1;
+CREATE SEQUENCE IF NOT EXISTS seq_receipt_number START 1 INCREMENT 1;
 
 -- ============================================
 -- TABLE: users
@@ -47,6 +49,7 @@ CREATE INDEX idx_users_username ON users(username);
 -- ============================================
 CREATE TABLE clients (
     id BIGSERIAL PRIMARY KEY,
+    version BIGINT NOT NULL DEFAULT 0,
     name VARCHAR(100) NOT NULL,
     phone VARCHAR(20),
     email VARCHAR(100),
@@ -94,6 +97,7 @@ CREATE INDEX idx_suppliers_tax_identification_number ON suppliers(tax_identifica
 -- ============================================
 CREATE TABLE products (
     id BIGSERIAL PRIMARY KEY,
+    version BIGINT NOT NULL DEFAULT 0,
     reference VARCHAR(50) UNIQUE,
     name VARCHAR(100) NOT NULL,
     description VARCHAR(500),
@@ -165,6 +169,7 @@ CREATE INDEX idx_product_costs_product_date ON product_costs(product_id, effecti
 -- ============================================
 CREATE TABLE documents (
     id BIGSERIAL PRIMARY KEY,
+    version BIGINT NOT NULL DEFAULT 0,
     document_number VARCHAR(50) UNIQUE NOT NULL,
     date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     document_type VARCHAR(20) NOT NULL CHECK (document_type IN ('QUOTE', 'DELIVERY_NOTE', 'INVOICE')),
@@ -305,6 +310,23 @@ CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp);
 CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
 
 -- ============================================
+-- TABLE: refresh_tokens
+-- Section 6.1: JWT Refresh Token Management
+-- ============================================
+CREATE TABLE refresh_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    token_hash VARCHAR(64) UNIQUE NOT NULL, -- SHA-256 hash of the refresh token
+    username VARCHAR(50) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (username) REFERENCES users(username)
+);
+
+-- Index on username for bulk revocation
+CREATE INDEX idx_refresh_tokens_username ON refresh_tokens(username);
+
+-- ============================================
 -- SAMPLE DATA (for testing)
 -- ============================================
 
@@ -313,8 +335,8 @@ INSERT INTO users (username, password, full_name, role, enabled) VALUES
 ('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'Administrateur', 'ADMIN', TRUE);
 
 -- Insert sample client
-INSERT INTO clients (name, phone, email, address, tin, credit_limit, current_debt) VALUES
-('ABC Construction SARL', '+216 71 123 456', 'contact@abc.tn', '123 Rue de l''Industrie, Tunis', '1234567/A/M/000', 5000.000, 0.000);
+INSERT INTO clients (version, name, phone, email, address, tax_identification_number, credit_limit, current_debt) VALUES
+(0, 'ABC Construction SARL', '+216 71 123 456', 'contact@abc.tn', '123 Rue de l''Industrie, Tunis', '1234567/A/M/000', 5000.000, 0.000);
 
 -- Insert sample products
 INSERT INTO products (reference, name, description, category, unit_type, is_heavy_material, base_unit, stock_quantity, average_purchase_price, price_on_site, price_delivered) VALUES

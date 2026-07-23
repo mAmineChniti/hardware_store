@@ -1,11 +1,11 @@
 package tn.inovexahub.hardware_store;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
-@Disabled("Requires database connection")
+@ActiveProfiles("test")
 class HardwareStoreApplicationTests {
 
   @Test

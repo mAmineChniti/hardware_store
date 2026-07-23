@@ -27,6 +27,7 @@ entity utilisateurs {
 
 entity clients {
   id BIGSERIAL PK
+  version BIGINT
   nom VARCHAR(100)
   téléphone VARCHAR(20)
   email VARCHAR(100)
@@ -56,6 +57,7 @@ entity fournisseurs {
 
 entity produits {
   id BIGSERIAL PK
+  version BIGINT
   référence VARCHAR(50) UNIQUE
   nom VARCHAR(100)
   description VARCHAR(500)
@@ -94,6 +96,7 @@ entity coûts_produits {
 
 entity documents {
   id BIGSERIAL PK
+  version BIGINT
   numéro_document VARCHAR(50) UNIQUE
   date TIMESTAMP
   type_document VARCHAR(20)
@@ -166,6 +169,15 @@ entity journal_audit {
   horodatage TIMESTAMP
 }
 
+entity jetons_rafraîchissement {
+  id BIGSERIAL PK
+  hash_jeton VARCHAR(64) UNIQUE
+  nom_utilisateur VARCHAR(50)
+  date_expiration TIMESTAMP
+  révoqué BOOLEAN
+  date_création TIMESTAMP
+}
+
 ' ============================================
 ' RELATIONS CLÉS ÉTRANGÈRES
 ' ============================================
@@ -182,6 +194,7 @@ reçus_paiements }o--o| utilisateurs : "utilisateur_id"
 historique_crédit }o--|| clients : "client_id"
 historique_crédit }o--o| documents : "document_id"
 historique_crédit }o--|| reçus_paiements : "reçu_paiement_id"
+jetons_rafraîchissement }o--|| utilisateurs : "nom_utilisateur"
 
 ' ============================================
 ' NOTES

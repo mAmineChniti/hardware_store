@@ -27,6 +27,7 @@ entity users {
 
 entity clients {
   id BIGSERIAL PK
+  version BIGINT
   name VARCHAR(100)
   phone VARCHAR(20)
   email VARCHAR(100)
@@ -56,6 +57,7 @@ entity suppliers {
 
 entity products {
   id BIGSERIAL PK
+  version BIGINT
   reference VARCHAR(50) UNIQUE
   name VARCHAR(100)
   description VARCHAR(500)
@@ -94,6 +96,7 @@ entity product_costs {
 
 entity documents {
   id BIGSERIAL PK
+  version BIGINT
   document_number VARCHAR(50) UNIQUE
   date TIMESTAMP
   document_type VARCHAR(20)
@@ -166,6 +169,15 @@ entity audit_logs {
   timestamp TIMESTAMP
 }
 
+entity refresh_tokens {
+  id BIGSERIAL PK
+  token_hash VARCHAR(64) UNIQUE
+  username VARCHAR(50)
+  expires_at TIMESTAMP
+  revoked BOOLEAN
+  created_at TIMESTAMP
+}
+
 ' ============================================
 ' FOREIGN KEY RELATIONSHIPS
 ' ============================================
@@ -182,6 +194,7 @@ payment_receipts }o--o| users : "user_id"
 credit_history }o--|| clients : "client_id"
 credit_history }o--o| documents : "document_id"
 credit_history }o--|| payment_receipts : "payment_receipt_id"
+refresh_tokens }o--|| users : "username"
 
 ' ============================================
 ' NOTES

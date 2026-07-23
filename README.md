@@ -184,7 +184,8 @@ SPRING_DATASOURCE_PASSWORD=your_password
 
 # JWT Secret
 JWT_SECRET=your-secret-key-minimum-256-bits
-JWT_EXPIRATION=86400000
+JWT_ACCESS_EXPIRATION=900000
+JWT_REFRESH_EXPIRATION=1200000
 
 # Configuration serveur
 SERVER_PORT=8080
@@ -258,7 +259,9 @@ http://localhost:8080/swagger-ui.html
 ### Endpoints Principaux
 
 #### Authentification (`/api/auth`)
-- `POST /api/auth/login` - Connexion utilisateur (retourne JWT token)
+- `POST /api/auth/login` - Connexion utilisateur (retourne access token + refresh token JWT)
+- `POST /api/auth/refresh` - Renouvelle les tokens JWT à partir d'un refresh token valide (le refresh token est rotatif : le client doit remplacer l'ancien refresh token par le nouveau retourné, l'ancien étant révoqué)
+- `POST /api/auth/logout` - Déconnexion (invalide le refresh token côté serveur ; nécessite le refresh token dans le body)
 - `POST /api/auth/register` - Inscription utilisateur (crée compte EMPLOYEE par défaut)
 - `PUT /api/auth/users/{id}` - Mise à jour utilisateur (requiert authentification)
 - `DELETE /api/auth/users/{id}` - Suppression utilisateur (requiert authentification)

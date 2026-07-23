@@ -124,7 +124,7 @@ public class ClientService {
       BigDecimal newDebt = client.getCurrentDebt().add(saleAmount);
       BigDecimal excess = newDebt.subtract(client.getCreditLimit());
       throw new CreditLimitExceededException(
-          "Vente refusée : Dépassement de plafond de crédit de " + excess + " DT");
+          "Sale refused: Credit limit exceeded by " + excess + " DT");
     }
   }
 
@@ -240,7 +240,7 @@ public class ClientService {
     // Save payment receipt
     PaymentReceipt savedReceipt = paymentReceiptRepository.save(paymentReceipt);
 
-    // Create信用 history entry (negative amount for payment)
+    // Create credit history entry (negative amount for payment)
     CreditHistory creditHistory =
         addPaymentCreditHistoryEntry(client, savedReceipt, amountPaid.negate());
 
@@ -251,10 +251,10 @@ public class ClientService {
     return savedReceipt;
   }
 
-  private synchronized String generateReceiptNumber() {
-    // Simple receipt number generation - can be enhanced
-    long count = paymentReceiptRepository.count() + 1;
-    return "REC-" + String.format("%06d", count);
+  private String generateReceiptNumber() {
+    // Use database sequence for thread-safe receipt number generation
+    Long sequenceValue = paymentReceiptRepository.getNextReceiptSequence();
+    return "REC-" + String.format("%06d", sequenceValue);
   }
 
   // ==================== Reporting ====================

@@ -20,6 +20,7 @@ entity "Utilisateur" as utilisateur {
 entity "Client" as client {
   *id : BIGINT
   --
+  version : BIGINT
   nom : VARCHAR(100)
   téléphone : VARCHAR(20)
   email : VARCHAR(100)
@@ -51,6 +52,7 @@ entity "Fournisseur" as fournisseur {
 entity "Produit" as produit {
   *id : BIGINT
   --
+  version : BIGINT
   référence : VARCHAR(50)
   nom : VARCHAR(100)
   description : VARCHAR(500)
@@ -92,6 +94,7 @@ entity "CoûtProduit" as coût_produit {
 entity "Document" as document {
   *id : BIGINT
   --
+  version : BIGINT
   numéro_document : VARCHAR(50)
   date : TIMESTAMP
   type_document : VARCHAR
@@ -168,12 +171,23 @@ entity "JournalAudit" as journal_audit {
   horodatage : TIMESTAMP
 }
 
+entity "JetonRafraîchissement" as jeton_rafraîchissement {
+  *id : BIGINT
+  --
+  hash_jeton : VARCHAR(64)
+  nom_utilisateur : VARCHAR(50)
+  date_expiration : TIMESTAMP
+  révoqué : BOOLEAN
+  date_création : TIMESTAMP
+}
+
 ' ============================================
 ' RELATIONS
 ' ============================================
 
 utilisateur ||..o{ document : "crée"
 utilisateur ||..o{ reçu_paiement : "enregistre"
+utilisateur ||..o{ jeton_rafraîchissement : "possède"
 
 client ||..o{ document : "possède"
 client ||..o{ reçu_paiement : "effectue"

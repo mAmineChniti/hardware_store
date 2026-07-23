@@ -1,6 +1,11 @@
 package tn.inovexahub.hardware_store.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.io.IOException;
@@ -43,9 +48,42 @@ public class ReportingController {
   @Operation(
       summary = "Get revenue statistics",
       description = "Get revenue statistics for a date range (Admin only)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Revenue statistics calculated",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    examples =
+                        @ExampleObject(
+                            name = "RevenueStats",
+                            value =
+                                """
+                                {
+                                  "totalRevenue": 125000.000,
+                                  "totalRevenueExcludingTax": 108695.652,
+                                  "totalVat": 16304.348,
+                                  "documentCount": 42,
+                                  "averageRevenue": 2976.190
+                                }"""))),
+        @ApiResponse(responseCode = "400", description = "Invalid date range", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Forbidden - admin access required",
+            content = @Content)
+      })
   public ResponseEntity<Map<String, Object>> getRevenueStats(
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+      @Parameter(description = "Start date", example = "2024-01-01", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate startDate,
+      @Parameter(description = "End date", example = "2024-01-31", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate endDate) {
     if (startDate.isAfter(endDate)) {
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "startDate must not be after endDate");
@@ -57,9 +95,40 @@ public class ReportingController {
   @Operation(
       summary = "Get daily revenue",
       description = "Get daily revenue data for a date range (Admin only)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Daily revenue data retrieved",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    examples =
+                        @ExampleObject(
+                            name = "DailyRevenue",
+                            value =
+                                """
+                                {
+                                  "2024-01-01": 5200.000,
+                                  "2024-01-02": 3800.500,
+                                  "2024-01-03": 0.000
+                                }"""))),
+        @ApiResponse(responseCode = "400", description = "Invalid date range", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Forbidden - admin access required",
+            content = @Content)
+      })
   public ResponseEntity<Map<LocalDate, BigDecimal>> getDailyRevenue(
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+      @Parameter(description = "Start date", example = "2024-01-01", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate startDate,
+      @Parameter(description = "End date", example = "2024-01-31", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate endDate) {
     if (startDate.isAfter(endDate)) {
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "startDate must not be after endDate");
@@ -73,9 +142,41 @@ public class ReportingController {
   @Operation(
       summary = "Get margin statistics",
       description = "Calculate margin statistics for a date range (Admin only)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Margin statistics calculated",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    examples =
+                        @ExampleObject(
+                            name = "MarginStats",
+                            value =
+                                """
+                                {
+                                  "totalRevenue": 108695.652,
+                                  "totalCost": 72450.000,
+                                  "grossMargin": 36245.652,
+                                  "marginPercentage": 33.3500
+                                }"""))),
+        @ApiResponse(responseCode = "400", description = "Invalid date range", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Forbidden - admin access required",
+            content = @Content)
+      })
   public ResponseEntity<Map<String, Object>> getMarginStats(
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+      @Parameter(description = "Start date", example = "2024-01-01", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate startDate,
+      @Parameter(description = "End date", example = "2024-01-31", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate endDate) {
     if (startDate.isAfter(endDate)) {
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "startDate must not be after endDate");
@@ -87,6 +188,40 @@ public class ReportingController {
 
   @GetMapping("/debtors")
   @Operation(summary = "Get debtor report", description = "Get debtor risk report (Admin only)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Debtor risk report retrieved",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    examples =
+                        @ExampleObject(
+                            name = "DebtorReport",
+                            value =
+                                """
+                                {
+                                  "debtorCount": 3,
+                                  "totalOutstandingDebt": 45000.000,
+                                  "totalCreditLimit": 80000.000,
+                                  "creditUtilization": 56.2500,
+                                  "debtors": [
+                                    {
+                                      "id": 2,
+                                      "name": "Entreprise XYZ",
+                                      "creditLimit": 30000.000,
+                                      "currentDebt": 22500.000,
+                                      "deleted": false
+                                    }
+                                  ]
+                                }"""))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Forbidden - admin access required",
+            content = @Content)
+      })
   public ResponseEntity<Map<String, Object>> getDebtorReport() {
     return ResponseEntity.ok(reportingService.getDebtorReport());
   }
@@ -95,8 +230,38 @@ public class ReportingController {
   @Operation(
       summary = "Get clients near credit limit",
       description = "Get clients within threshold of their credit limit (Admin only)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Clients near credit limit retrieved",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    examples =
+                        @ExampleObject(
+                            name = "ClientsNearCreditLimit",
+                            value =
+                                """
+                                [
+                                  {
+                                    "id": 2,
+                                    "name": "Entreprise XYZ",
+                                    "creditLimit": 30000.000,
+                                    "currentDebt": 29500.000,
+                                    "deleted": false
+                                  }
+                                ]"""))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Forbidden - admin access required",
+            content = @Content)
+      })
   public ResponseEntity<List<Client>> getClientsNearCreditLimit(
-      @RequestParam(defaultValue = "100.0") BigDecimal threshold) {
+      @Parameter(description = "Credit margin threshold", example = "100.0")
+          @RequestParam(defaultValue = "100.0")
+          BigDecimal threshold) {
     return ResponseEntity.ok(reportingService.getClientsNearCreditLimit(threshold));
   }
 
@@ -106,10 +271,50 @@ public class ReportingController {
   @Operation(
       summary = "Get top products by revenue",
       description = "Get top selling products by revenue (Admin only)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Top products by revenue retrieved",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    examples =
+                        @ExampleObject(
+                            name = "TopProductsByRevenue",
+                            value =
+                                """
+                                [
+                                  {
+                                    "product": {"id": 1, "reference": "PROD001", "name": "Ciment Portland"},
+                                    "revenue": 45000.00,
+                                    "quantitySold": 500.000
+                                  },
+                                  {
+                                    "product": {"id": 2, "reference": "PROD002", "name": "Fer à Béton"},
+                                    "revenue": 32000.00,
+                                    "quantitySold": 1000.000
+                                  }
+                                ]"""))),
+        @ApiResponse(responseCode = "400", description = "Invalid date range", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Forbidden - admin access required",
+            content = @Content)
+      })
   public ResponseEntity<List<Map<String, Object>>> getTopProductsByRevenue(
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
-      @RequestParam(defaultValue = "10") int limit) {
+      @Parameter(description = "Start date", example = "2024-01-01", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate startDate,
+      @Parameter(description = "End date", example = "2024-01-31", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate endDate,
+      @Parameter(description = "Maximum number of products to return (1-100)", example = "10")
+          @RequestParam(defaultValue = "10")
+          int limit) {
     if (startDate.isAfter(endDate)) {
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "startDate must not be after endDate");
@@ -127,10 +332,50 @@ public class ReportingController {
   @Operation(
       summary = "Get top products by margin",
       description = "Get top products by margin (Admin only)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Top products by margin retrieved",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    examples =
+                        @ExampleObject(
+                            name = "TopProductsByMargin",
+                            value =
+                                """
+                                [
+                                  {
+                                    "product": {"id": 1, "reference": "PROD001", "name": "Ciment Portland"},
+                                    "margin": 18000.00,
+                                    "quantitySold": 500.000
+                                  },
+                                  {
+                                    "product": {"id": 3, "reference": "PROD003", "name": "Carrelage"},
+                                    "margin": 12500.00,
+                                    "quantitySold": 200.000
+                                  }
+                                ]"""))),
+        @ApiResponse(responseCode = "400", description = "Invalid date range", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Forbidden - admin access required",
+            content = @Content)
+      })
   public ResponseEntity<List<Map<String, Object>>> getTopProductsByMargin(
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
-      @RequestParam(defaultValue = "10") int limit) {
+      @Parameter(description = "Start date", example = "2024-01-01", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate startDate,
+      @Parameter(description = "End date", example = "2024-01-31", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate endDate,
+      @Parameter(description = "Maximum number of products to return (1-100)", example = "10")
+          @RequestParam(defaultValue = "10")
+          int limit) {
     if (startDate.isAfter(endDate)) {
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "startDate must not be after endDate");
@@ -150,6 +395,39 @@ public class ReportingController {
   @Operation(
       summary = "Get stock report",
       description = "Get stock statistics and low stock products (Admin only)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Stock report retrieved",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    examples =
+                        @ExampleObject(
+                            name = "StockReport",
+                            value =
+                                """
+                                {
+                                  "totalProducts": 150,
+                                  "lowStockProducts": 12,
+                                  "totalStockValue": 285000.000,
+                                  "lowStockProductsList": [
+                                    {
+                                      "id": 5,
+                                      "reference": "PROD005",
+                                      "name": "Peinture Blanche",
+                                      "stockQuantity": 3.000,
+                                      "averagePurchasePrice": 45.000
+                                    }
+                                  ]
+                                }"""))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Forbidden - admin access required",
+            content = @Content)
+      })
   public ResponseEntity<Map<String, Object>> getStockReport() {
     return ResponseEntity.ok(reportingService.getStockReport());
   }
@@ -160,9 +438,28 @@ public class ReportingController {
   @Operation(
       summary = "Export sales journal to CSV",
       description = "Export sales journal for a date range to CSV format (Admin only)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "CSV file generated",
+            content = @Content(mediaType = "text/csv")),
+        @ApiResponse(responseCode = "400", description = "Invalid date range", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Forbidden - admin access required",
+            content = @Content)
+      })
   public ResponseEntity<byte[]> exportSalesJournalToCsv(
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate)
+      @Parameter(description = "Start date", example = "2024-01-01", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate startDate,
+      @Parameter(description = "End date", example = "2024-01-31", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate endDate)
       throws IOException {
     if (startDate.isAfter(endDate)) {
       throw new ResponseStatusException(
@@ -188,9 +485,31 @@ public class ReportingController {
   @Operation(
       summary = "Export sales journal to Excel",
       description = "Export sales journal for a date range to Excel format (Admin only)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Excel file generated",
+            content =
+                @Content(
+                    mediaType =
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+        @ApiResponse(responseCode = "400", description = "Invalid date range", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Forbidden - admin access required",
+            content = @Content)
+      })
   public ResponseEntity<byte[]> exportSalesJournalToExcel(
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate)
+      @Parameter(description = "Start date", example = "2024-01-01", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate startDate,
+      @Parameter(description = "End date", example = "2024-01-31", required = true)
+          @RequestParam
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate endDate)
       throws IOException {
     if (startDate.isAfter(endDate)) {
       throw new ResponseStatusException(
@@ -218,6 +537,18 @@ public class ReportingController {
   @Operation(
       summary = "Export stock report to CSV",
       description = "Export stock report to CSV format (Admin only)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "CSV file generated",
+            content = @Content(mediaType = "text/csv")),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Forbidden - admin access required",
+            content = @Content)
+      })
   public ResponseEntity<byte[]> exportStockReportToCsv() throws IOException {
     byte[] csvBytes = reportingService.exportStockReportToCsv();
 
@@ -233,6 +564,21 @@ public class ReportingController {
   @Operation(
       summary = "Export stock report to Excel",
       description = "Export stock report to Excel format (Admin only)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Excel file generated",
+            content =
+                @Content(
+                    mediaType =
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Forbidden - admin access required",
+            content = @Content)
+      })
   public ResponseEntity<byte[]> exportStockReportToExcel() throws IOException {
     byte[] excelBytes = reportingService.exportStockReportToExcel();
 

@@ -63,6 +63,7 @@ class User {
 
 class Client {
   - Long id
+  - Long version
   - String name
   - String phone
   - String email
@@ -96,6 +97,7 @@ class Supplier {
 
 class Product {
   - Long id
+  - Long version
   - String reference
   - String name
   - String description
@@ -104,7 +106,7 @@ class Product {
   - UnitType unitType
   - Boolean isHeavyMaterial
   - String baseUnit
-  - Double stockQuantity
+  - BigDecimal stockQuantity
   - BigDecimal averagePurchasePrice
   - BigDecimal priceOnSite
   - BigDecimal priceDelivered
@@ -118,7 +120,7 @@ class ProductConditioning {
   - Long id
   - Product product
   - String description
-  - Double quantityPerUnit
+  - BigDecimal quantityPerUnit
   - BigDecimal unitPrice
   - LocalDateTime createdAt
   - LocalDateTime updatedAt
@@ -139,6 +141,7 @@ class ProductCost {
 
 class Document {
   - Long id
+  - Long version
   - String documentNumber
   - LocalDateTime date
   - DocumentType documentType
@@ -166,8 +169,9 @@ class DocumentLine {
   - Document document
   - Product product
   - String conditioningDescription
-  - Double quantity
+  - BigDecimal quantity
   - BigDecimal unitPrice
+  - BigDecimal unitCost
   - BigDecimal totalLineExcludingTax
   - BigDecimal totalLineIncludingTax
   - Boolean isDelivered
@@ -217,6 +221,16 @@ class AuditLog {
   + onCreate()
 }
 
+class RefreshToken {
+  - Long id
+  - String tokenHash
+  - String username
+  - LocalDateTime expiresAt
+  - boolean revoked
+  - LocalDateTime createdAt
+  + onCreate()
+}
+
 ' ============================================
 ' RELATIONSHIPS
 ' ============================================
@@ -232,6 +246,7 @@ CreditHistory --> TransactionType : uses
 ' Entity relationships
 User "1" -- "*" Document : creates >
 User "1" -- "*" PaymentReceipt : registers >
+User "1" -- "*" RefreshToken : has >
 
 Client "1" -- "*" Document : has >
 Client "1" -- "*" PaymentReceipt : makes >

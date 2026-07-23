@@ -4,6 +4,7 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7"
     id("com.diffplug.spotless") version "6.25.0"
     id("checkstyle")
+    id("com.github.spotbugs") version "6.5.9"
 }
 
 group = "tn.inovexahub"
@@ -53,6 +54,7 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    systemProperty("springdotenv.enabled", "false")
 }
 
 spotless {
@@ -70,6 +72,10 @@ checkstyle {
     configFile = file("${rootProject.projectDir}/config/checkstyle/checkstyle.xml")
 }
 
+spotbugs {
+    excludeFilter.set(file("${rootProject.projectDir}/config/spotbugs/exclude-filter.xml"))
+}
+
 tasks.withType<Checkstyle>().configureEach {
     reports.xml.required.set(true)
     reports.html.required.set(true)
@@ -77,8 +83,8 @@ tasks.withType<Checkstyle>().configureEach {
 
 tasks.register("lint") {
     group = "verification"
-    description = "Run linting checks (checkstyle)"
-    dependsOn("checkstyleMain", "checkstyleTest")
+    description = "Run linting checks (checkstyle + spotless + spotbugs)"
+    dependsOn("checkstyleMain", "checkstyleTest", "spotlessJavaCheck", "spotbugsMain", "spotbugsTest")
 }
 
 tasks.register("format") {
