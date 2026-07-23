@@ -1,5 +1,6 @@
 package tn.inovexahub.hardware_store.entity;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -26,28 +27,36 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(description = "Product conditioning representing packaging options")
 public class ProductConditioning {
 
+  @Schema(description = "Unique conditioning ID", example = "1")
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
+  @Schema(description = "Associated product")
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "product_id", nullable = false)
   private Product product;
 
+  @Schema(description = "Conditioning description", example = "Roll of 100 meters")
   @Column(name = "description", length = 100)
   private String description; // e.g., "Rouleau 100m"
 
+  @Schema(description = "Quantity per conditioning unit", example = "100.00")
   @Column(name = "quantity_per_unit", precision = 19, scale = 3)
   private BigDecimal quantityPerUnit;
 
+  @Schema(description = "Price per conditioning unit", example = "95.00")
   @Column(name = "unit_price", precision = 19, scale = 3)
   private BigDecimal unitPrice;
 
+  @Schema(description = "Creation timestamp", example = "2024-01-01T10:00:00")
   @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;
 
+  @Schema(description = "Last update timestamp", example = "2024-01-02T10:00:00")
   @Column(name = "updated_at")
   private LocalDateTime updatedAt;
 
