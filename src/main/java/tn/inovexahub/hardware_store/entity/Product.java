@@ -83,7 +83,7 @@ public class Product {
   @Column(name = "stock_quantity", precision = 19, scale = 3)
   @NotNull(message = "Stock quantity is required")
   @PositiveOrZero(message = "Stock quantity cannot be negative")
-  private Double stockQuantity = 0.0;
+  private BigDecimal stockQuantity = BigDecimal.ZERO;
 
   @Column(name = "average_purchase_price", precision = 19, scale = 3)
   @NotNull(message = "Average purchase price is required")

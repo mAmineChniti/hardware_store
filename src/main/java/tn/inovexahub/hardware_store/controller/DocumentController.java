@@ -131,7 +131,7 @@ public class DocumentController {
   public ResponseEntity<DocumentLine> addDocumentLine(
       @PathVariable Long id,
       @RequestParam Long productId,
-      @RequestParam Double quantity,
+      @RequestParam BigDecimal quantity,
       @RequestParam(required = false) BigDecimal unitPrice,
       @RequestParam(required = false) String conditioningDescription,
       @RequestParam(required = false) Boolean isDelivered,

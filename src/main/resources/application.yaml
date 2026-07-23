@@ -2,14 +2,14 @@ spring:
   application:
     name: hardware_store
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/hardware_store}
-    username: ${SPRING_DATASOURCE_USERNAME:postgres}
-    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:validate}
-    show-sql: ${SPRING_JPA_SHOW_SQL:true}
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO}
+    show-sql: ${SPRING_JPA_SHOW_SQL}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -21,12 +21,12 @@ spring:
 logging:
   level:
     org.springframework.boot: INFO
-    org.hibernate.SQL: ${LOGGING_HIBERNATE_SQL:INFO}
-    org.hibernate.type.descriptor.sql.BasicBinder: ${LOGGING_HIBERNATE_BINDER:INFO}
+    org.hibernate.SQL: ${LOGGING_HIBERNATE_SQL}
+    org.hibernate.type.descriptor.sql.BasicBinder: ${LOGGING_HIBERNATE_BINDER}
 
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${APP_PORT}
 
 jwt:
   secret: ${JWT_SECRET}
-  expiration: ${JWT_EXPIRATION:86400000}
+  expiration: ${JWT_EXPIRATION}

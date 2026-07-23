@@ -22,6 +22,7 @@ public interface CreditHistoryRepository extends JpaRepository<CreditHistory, Lo
   List<CreditHistory> findByEntryDateBetween(LocalDateTime startDate, LocalDateTime endDate);
 
   @Query(
-      "SELECT ch FROM CreditHistory ch WHERE ch.clientId = :clientId AND ch.deleted = false ORDER BY ch.entryDate DESC")
+      "SELECT ch FROM CreditHistory ch WHERE ch.client.id = :clientId "
+          + "AND ch.deleted = false ORDER BY ch.entryDate DESC")
   List<CreditHistory> findActiveCreditHistoryByClient(Long clientId);
 }

@@ -48,7 +48,7 @@ public class DocumentLine {
   private String conditioningDescription; // Snapshot of how it was sold
 
   @Column(name = "quantity", precision = 19, scale = 3)
-  private Double quantity;
+  private BigDecimal quantity;
 
   @Column(name = "unit_price", precision = 19, scale = 3)
   private BigDecimal unitPrice; // Price per unit applied at sale time

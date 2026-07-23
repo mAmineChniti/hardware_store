@@ -223,14 +223,17 @@ public class ProductService {
   }
 
   // Stock management
-  public void updateStockQuantity(Long productId, Double quantityChange) {
+  public void updateStockQuantity(Long productId, BigDecimal quantityChange) {
     Product product =
         productRepository
             .findById(productId)
             .orElseThrow(() -> new RuntimeException("Product not found"));
 
-    Double newQuantity = product.getStockQuantity() + quantityChange;
-    if (newQuantity < 0) {
+    // Normalize quantityChange to scale 3 before calculation
+    BigDecimal normalizedChange = quantityChange.setScale(3, RoundingMode.HALF_UP);
+    BigDecimal newQuantity =
+        product.getStockQuantity().add(normalizedChange).setScale(3, RoundingMode.HALF_UP);
+    if (newQuantity.compareTo(BigDecimal.ZERO) < 0) {
       throw new RuntimeException("Insufficient stock");
     }
 

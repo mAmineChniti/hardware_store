@@ -165,7 +165,7 @@ public class ReportingService {
         if (line.getUnitCost() != null) {
           BigDecimal lineRevenue = line.getTotalLineExcludingTax();
           BigDecimal unitCost = line.getUnitCost();
-          BigDecimal lineCost = unitCost.multiply(BigDecimal.valueOf(line.getQuantity()));
+          BigDecimal lineCost = unitCost.multiply(line.getQuantity());
 
           totalRevenue = totalRevenue.add(lineRevenue);
           totalCost = totalCost.add(lineCost);
@@ -317,7 +317,7 @@ public class ReportingService {
       if (line.getUnitCost() != null && line.getProduct() != null) {
         Product product = line.getProduct();
         BigDecimal revenue = line.getTotalLineExcludingTax();
-        BigDecimal cost = line.getUnitCost().multiply(BigDecimal.valueOf(line.getQuantity()));
+        BigDecimal cost = line.getUnitCost().multiply(line.getQuantity());
         BigDecimal margin = revenue.subtract(cost);
         productMargin.merge(product, margin, BigDecimal::add);
       }
@@ -339,7 +339,7 @@ public class ReportingService {
         .collect(Collectors.toList());
   }
 
-  private Double getProductQuantitySold(
+  private BigDecimal getProductQuantitySold(
       Product product, LocalDateTime startDate, LocalDateTime endDate) {
     List<Document> documents =
         documentRepository.findByDateGreaterThanEqualAndDateLessThan(startDate, endDate).stream()
@@ -347,12 +347,12 @@ public class ReportingService {
             .filter(doc -> doc.getDocumentType() == DocumentType.INVOICE)
             .collect(Collectors.toList());
 
-    Double totalQuantity = 0.0;
+    BigDecimal totalQuantity = BigDecimal.ZERO;
     for (Document document : documents) {
       List<DocumentLine> lines = documentLineRepository.findByDocumentId(document.getId());
       for (DocumentLine line : lines) {
         if (line.getProduct() != null && line.getProduct().getId().equals(product.getId())) {
-          totalQuantity += line.getQuantity();
+          totalQuantity = totalQuantity.add(line.getQuantity());
         }
       }
     }
@@ -372,8 +372,7 @@ public class ReportingService {
 
     BigDecimal totalStockValue =
         allProducts.stream()
-            .map(
-                p -> p.getAveragePurchasePrice().multiply(BigDecimal.valueOf(p.getStockQuantity())))
+            .map(p -> p.getAveragePurchasePrice().multiply(p.getStockQuantity()))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
     Map<String, Object> report = new HashMap<>();
@@ -564,9 +563,7 @@ public class ReportingService {
     // CSV Data
     for (Product product : allProducts) {
       BigDecimal stockValue =
-          product
-              .getAveragePurchasePrice()
-              .multiply(BigDecimal.valueOf(product.getStockQuantity()));
+          product.getAveragePurchasePrice().multiply(product.getStockQuantity());
 
       writer.println(
           String.join(
@@ -618,9 +615,7 @@ public class ReportingService {
       int rowNum = 1;
       for (Product product : allProducts) {
         BigDecimal stockValue =
-            product
-                .getAveragePurchasePrice()
-                .multiply(BigDecimal.valueOf(product.getStockQuantity()));
+            product.getAveragePurchasePrice().multiply(product.getStockQuantity());
 
         Row row = sheet.createRow(rowNum++);
         row.createCell(0).setCellValue(product.getReference());
@@ -628,7 +623,7 @@ public class ReportingService {
         row.createCell(2)
             .setCellValue(product.getCategory() != null ? product.getCategory() : "N/A");
         row.createCell(3).setCellValue(product.getUnitType().toString());
-        row.createCell(4).setCellValue(product.getStockQuantity());
+        row.createCell(4).setCellValue(product.getStockQuantity().doubleValue());
         row.createCell(5).setCellValue(product.getAveragePurchasePrice().doubleValue());
         row.createCell(6).setCellValue(stockValue.doubleValue());
         row.createCell(7)
