@@ -279,7 +279,7 @@ public class ProductController {
       summary = "Update stock quantity",
       description = "Update the stock quantity for a product (positive to add, negative to remove)")
   public ResponseEntity<Product> updateStockQuantity(
-      @PathVariable Long productId, @RequestParam Double quantityChange) {
+      @PathVariable Long productId, @RequestParam BigDecimal quantityChange) {
     try {
       productService.updateStockQuantity(productId, quantityChange);
       return productService

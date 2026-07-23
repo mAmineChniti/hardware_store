@@ -2,10 +2,10 @@ spring:
   application:
     name: hardware_store
   datasource:
-    url: jdbc:h2:mem:testdb
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:testdb}
     driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
   jpa:
     hibernate:
       ddl-auto: create-drop
@@ -22,3 +22,7 @@ logging:
   level:
     org.springframework.boot: INFO
     org.hibernate.SQL: INFO
+
+jwt:
+  secret: test-secret-key-for-jwt-token-generation-must-be-at-least-256-bits-long-for-security
+  expiration: 86400000

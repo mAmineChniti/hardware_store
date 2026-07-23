@@ -46,8 +46,6 @@ public class SecurityConfig {
                     .requestMatchers("/api/auth/users/**")
                     .hasRole("ADMIN")
                     // Delete operations require ADMIN
-                    .requestMatchers("/api/**/delete/**")
-                    .hasRole("ADMIN")
                     .requestMatchers(HttpMethod.DELETE, "/api/**")
                     .hasRole("ADMIN")
                     // Employee and Admin can access other endpoints

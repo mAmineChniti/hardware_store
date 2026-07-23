@@ -1,6 +1,7 @@
 package tn.inovexahub.hardware_store.service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -169,12 +170,12 @@ public class DocumentService {
   public DocumentLine addDocumentLine(
       Long documentId,
       Product product,
-      Double quantity,
+      BigDecimal quantity,
       BigDecimal unitPrice,
       String conditioningDescription,
       Boolean isDelivered,
       Long conditioningId) {
-    if (quantity == null || quantity <= 0) {
+    if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
       throw new RuntimeException("Quantity must be positive");
     }
 
@@ -227,12 +228,13 @@ public class DocumentService {
     }
 
     // Calculate line totals
-    BigDecimal lineExcludingTax = unitPrice.multiply(BigDecimal.valueOf(quantity));
+    BigDecimal lineExcludingTax = unitPrice.multiply(quantity).setScale(3, RoundingMode.HALF_UP);
     line.setTotalLineExcludingTax(lineExcludingTax);
 
     // Calculate line TTC (with document's VAT rate)
-    BigDecimal lineVat = lineExcludingTax.multiply(document.getVatRate());
-    BigDecimal lineIncludingTax = lineExcludingTax.add(lineVat);
+    BigDecimal lineVat =
+        lineExcludingTax.multiply(document.getVatRate()).setScale(3, RoundingMode.HALF_UP);
+    BigDecimal lineIncludingTax = lineExcludingTax.add(lineVat).setScale(3, RoundingMode.HALF_UP);
     line.setTotalLineIncludingTax(lineIncludingTax);
 
     // Set line number with synchronization for concurrency safety
@@ -262,7 +264,8 @@ public class DocumentService {
     }
 
     // Validate quantity and unit price before updating
-    if (lineDetails.getQuantity() == null || lineDetails.getQuantity() <= 0) {
+    if (lineDetails.getQuantity() == null
+        || lineDetails.getQuantity().compareTo(BigDecimal.ZERO) <= 0) {
       throw new RuntimeException("Quantity must be positive");
     }
     if (lineDetails.getUnitPrice() == null
@@ -276,11 +279,17 @@ public class DocumentService {
 
     // Recalculate line totals
     BigDecimal lineExcludingTax =
-        lineDetails.getUnitPrice().multiply(BigDecimal.valueOf(lineDetails.getQuantity()));
+        lineDetails
+            .getUnitPrice()
+            .multiply(lineDetails.getQuantity())
+            .setScale(3, RoundingMode.HALF_UP);
     line.setTotalLineExcludingTax(lineExcludingTax);
 
-    BigDecimal lineVat = lineExcludingTax.multiply(line.getDocument().getVatRate());
-    BigDecimal lineIncludingTax = lineExcludingTax.add(lineVat);
+    BigDecimal lineVat =
+        lineExcludingTax
+            .multiply(line.getDocument().getVatRate())
+            .setScale(3, RoundingMode.HALF_UP);
+    BigDecimal lineIncludingTax = lineExcludingTax.add(lineVat).setScale(3, RoundingMode.HALF_UP);
     line.setTotalLineIncludingTax(lineIncludingTax);
 
     DocumentLine savedLine = documentLineRepository.save(line);
@@ -463,7 +472,7 @@ public class DocumentService {
     List<DocumentLine> lines = documentLineRepository.findByDocumentId(documentId);
     for (DocumentLine line : lines) {
       if (line.getProduct() != null && line.getQuantity() != null) {
-        productService.updateStockQuantity(line.getProduct().getId(), -line.getQuantity());
+        productService.updateStockQuantity(line.getProduct().getId(), line.getQuantity().negate());
         line.setIsDelivered(true);
         documentLineRepository.save(line);
       }

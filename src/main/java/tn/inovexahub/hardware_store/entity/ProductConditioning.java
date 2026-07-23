@@ -40,7 +40,7 @@ public class ProductConditioning {
   private String description; // e.g., "Rouleau 100m"
 
   @Column(name = "quantity_per_unit", precision = 19, scale = 3)
-  private Double quantityPerUnit;
+  private BigDecimal quantityPerUnit;
 
   @Column(name = "unit_price", precision = 19, scale = 3)
   private BigDecimal unitPrice;
