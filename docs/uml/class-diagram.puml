@@ -51,6 +51,7 @@ enum TransactionType {
 class User {
   - Long id
   - String username
+  - String email
   - String password
   - String fullName
   - UserRole role
@@ -59,6 +60,7 @@ class User {
   - LocalDateTime updatedAt
   + onCreate()
   + onUpdate()
+  - normalizeEmail()
 }
 
 class Client {
@@ -231,6 +233,23 @@ class RefreshToken {
   + onCreate()
 }
 
+class PasswordResetToken {
+  - Long id
+  - User user
+  - String email
+  - String otpCode // BCrypt hashed
+  - LocalDateTime expiresAt
+  - Boolean used
+  - Integer failedAttempts
+  - LocalDateTime createdAt
+  + onCreate()
+  + isExpired()
+}
+
+class InvalidOtpException extends IllegalArgumentException {
+  + InvalidOtpException(String message)
+}
+
 ' ============================================
 ' RELATIONSHIPS
 ' ============================================
@@ -247,6 +266,7 @@ CreditHistory --> TransactionType : uses
 User "1" -- "*" Document : creates >
 User "1" -- "*" PaymentReceipt : registers >
 User "1" -- "*" RefreshToken : has >
+User "1" -- "*" PasswordResetToken : has reset tokens >
 
 Client "1" -- "*" Document : has >
 Client "1" -- "*" PaymentReceipt : makes >

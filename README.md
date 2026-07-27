@@ -14,6 +14,7 @@ Système de gestion commerciale complet pour les magasins de matériaux de const
 - [Installation](#installation)
 - [API Documentation](#api-documentation)
 - [Tests](#tests)
+- [Couverture des Tests](#-couverture-des-tests)
 
 ## 🎯 Vue d'ensemble
 
@@ -103,7 +104,7 @@ INOVEXAHUB Hardware Store POS est une solution de gestion commerciale moderne co
 
 ## 🗄️ Schéma de la Base de Données
 
-![Schéma Base de Données](docs/images/Schema-Base-De-Donnees-Magasin-Materiaux.png)
+![Schéma Base de Données](docs/images/Schema-Base-Donnees-Magasin-Materiaux.png)
 
 ### Tables Principales
 
@@ -187,6 +188,15 @@ JWT_SECRET=your-secret-key-minimum-256-bits
 JWT_ACCESS_EXPIRATION=900000
 JWT_REFRESH_EXPIRATION=1200000
 
+# Configuration SMTP (email)
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your_email@gmail.com
+MAIL_PASSWORD=your_app_password
+
+# OTP Configuration
+OTP_EXPIRY_MINUTES=10
+
 # Configuration serveur
 SERVER_PORT=8080
 ```
@@ -230,6 +240,11 @@ export SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/hardware_store
 export SPRING_DATASOURCE_USERNAME=postgres
 export SPRING_DATASOURCE_PASSWORD=your_password
 export JWT_SECRET=your-secret-key
+export MAIL_HOST=smtp.gmail.com
+export MAIL_PORT=587
+export MAIL_USERNAME=your_email@gmail.com
+export MAIL_PASSWORD=your_app_password
+export OTP_EXPIRY_MINUTES=10
 ```
 
 4. **Lancer l'application**
@@ -263,6 +278,8 @@ http://localhost:8080/swagger-ui.html
 - `POST /api/auth/refresh` - Renouvelle les tokens JWT à partir d'un refresh token valide (le refresh token est rotatif : le client doit remplacer l'ancien refresh token par le nouveau retourné, l'ancien étant révoqué)
 - `POST /api/auth/logout` - Déconnexion (invalide le refresh token côté serveur ; nécessite le refresh token dans le body)
 - `POST /api/auth/register` - Inscription utilisateur (crée compte EMPLOYEE par défaut)
+- `POST /api/auth/forgot-password` - Demander un code OTP de réinitialisation (envoyé par email)
+- `POST /api/auth/reset-password` - Réinitialiser le mot de passe avec le code OTP
 - `PUT /api/auth/users/{id}` - Mise à jour utilisateur (requiert authentification)
 - `DELETE /api/auth/users/{id}` - Suppression utilisateur (requiert authentification)
 
@@ -359,6 +376,10 @@ http://localhost:8080/swagger-ui.html
 
 # Tests avec rapport de couverture
 ./gradlew test jacocoTestReport
+
+# Ou via Make
+make test
+make test-coverage
 ```
 
 ### Qualité de Code
@@ -376,3 +397,49 @@ http://localhost:8080/swagger-ui.html
 # Lint complet
 ./gradlew lint
 ```
+
+## 📊 Couverture des Tests
+
+Le rapport de couverture est généré via **JaCoCo** et disponible dans `build/reports/jacoco/test/html/index.html`.
+
+### Couverture Globale
+
+| Métrique | Couvert | Total | Couverture |
+|----------|---------|-------|------------|
+| Instructions | 1 787 | 8 218 | **21.7%** |
+| Branches | 54 | 448 | **12.1%** |
+| Lignes | 482 | 2 005 | **24.0%** |
+| Méthodes | 108 | 375 | **28.8%** |
+
+### Couverture par Composant
+
+| Composant | Instructions | Couverture |
+|-----------|-------------|------------|
+| Security (JWT, Filtres, Config) | 437/520 | **84.0%** |
+| RefreshTokenService | 127/134 | **94.8%** |
+| PasswordResetService | 139/139 | **100%** |
+| EmailService | 25/25 | **100%** |
+| AuthController | 182/423 | **43.0%** |
+| ClientService | 194/412 | **47.1%** |
+| ProductService | 273/442 | **61.8%** |
+
+### Générer un Rapport
+
+```bash
+# Génère le rapport HTML + XML + CSV
+make test-coverage
+
+# Ouvrir le rapport dans le navigateur
+# macOS:
+open build/reports/jacoco/test/html/index.html
+# Linux:
+xdg-open build/reports/jacoco/test/html/index.html
+# Windows:
+start "" build/reports/jacoco/test/html/index.html
+```
+
+### Configuration
+
+- **Plugin**: JaCoCo 0.8.15 (supporte Java 26)
+- **Rapports**: HTML, XML et CSV dans `build/reports/jacoco/test/`
+- **Auto-exécution**: Le rapport est automatiquement généré après chaque `make test`

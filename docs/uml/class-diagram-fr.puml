@@ -51,6 +51,7 @@ enum TypeTransaction {
 class Utilisateur {
   - Long id
   - String nomUtilisateur
+  - String email
   - String motDePasse
   - String nomComplet
   - RoleUtilisateur role
@@ -59,6 +60,7 @@ class Utilisateur {
   - LocalDateTime dateModification
   + onCreate()
   + onUpdate()
+  - normalizeEmail()
 }
 
 class Client {
@@ -231,6 +233,23 @@ class JetonRafraîchissement {
   + onCreate()
 }
 
+class JetonRéinitialisation {
+  - Long id
+  - Utilisateur utilisateur
+  - String email
+  - String codeOtp // BCrypt hashé
+  - LocalDateTime dateExpiration
+  - Boolean utilisé
+  - Integer tentativesÉchouées
+  - LocalDateTime dateCréation
+  + onCreate()
+  + isExpired()
+}
+
+class ExceptionCodeOtpInvalide extends IllegalArgumentException {
+  + ExceptionCodeOtpInvalide(String message)
+}
+
 ' ============================================
 ' RELATIONS
 ' ============================================
@@ -247,6 +266,7 @@ HistoriqueCrédit --> TypeTransaction : utilise
 Utilisateur "1" -- "*" Document : crée >
 Utilisateur "1" -- "*" ReçuPaiement : enregistre >
 Utilisateur "1" -- "*" JetonRafraîchissement : possède >
+Utilisateur "1" -- "*" JetonRéinitialisation : possède des jetons de réinitialisation >
 
 Client "1" -- "*" Document : possède >
 Client "1" -- "*" ReçuPaiement : effectue >

@@ -13,6 +13,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -35,6 +36,10 @@ public class User {
   @Schema(description = "Unique username", example = "john_doe")
   @Column(name = "username", unique = true, nullable = false, length = 50)
   private String username;
+
+  @Schema(description = "User's email address", example = "john.doe@example.com")
+  @Column(name = "email", unique = true, nullable = false, length = 100)
+  private String email;
 
   @Schema(description = "BCrypt hashed password", accessMode = Schema.AccessMode.WRITE_ONLY)
   @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
@@ -72,10 +77,18 @@ public class User {
   protected void onCreate() {
     createdAt = LocalDateTime.now();
     updatedAt = LocalDateTime.now();
+    normalizeEmail();
   }
 
   @PreUpdate
   protected void onUpdate() {
     updatedAt = LocalDateTime.now();
+    normalizeEmail();
+  }
+
+  private void normalizeEmail() {
+    if (email != null) {
+      email = email.trim().toLowerCase(Locale.ROOT);
+    }
   }
 }

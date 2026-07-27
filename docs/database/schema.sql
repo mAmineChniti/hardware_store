@@ -32,6 +32,7 @@ CREATE SEQUENCE IF NOT EXISTS seq_receipt_number START 1 INCREMENT 1;
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
     password VARCHAR NOT NULL, -- BCrypt hashed
     full_name VARCHAR(100) NOT NULL,
     role VARCHAR(20) NOT NULL CHECK (role IN ('ADMIN', 'EMPLOYEE')),
@@ -42,6 +43,8 @@ CREATE TABLE users (
 
 -- Index on username for fast authentication
 CREATE INDEX idx_users_username ON users(username);
+-- Index on email for fast authentication
+CREATE INDEX idx_users_email ON users(email);
 
 -- ============================================
 -- TABLE: clients
@@ -327,12 +330,36 @@ CREATE TABLE refresh_tokens (
 CREATE INDEX idx_refresh_tokens_username ON refresh_tokens(username);
 
 -- ============================================
+-- TABLE: password_reset_tokens
+-- Section 6.2: Password Reset OTP Management
+-- ============================================
+CREATE TABLE password_reset_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    email VARCHAR(100) NOT NULL,
+    otp_code VARCHAR(100) NOT NULL, -- BCrypt hashed
+    expires_at TIMESTAMP NOT NULL,
+    used BOOLEAN NOT NULL DEFAULT FALSE,
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (email) REFERENCES users(email) ON DELETE CASCADE
+);
+
+-- Index on user_id for fast lookup during reset and bulk revocation
+CREATE INDEX idx_prt_user_id ON password_reset_tokens(user_id);
+-- Index on email for display/lookup
+CREATE INDEX idx_prt_email ON password_reset_tokens(email);
+-- Partial unique index: at most one active (unused) token per user
+CREATE UNIQUE INDEX idx_prt_active_user ON password_reset_tokens(user_id) WHERE used = false;
+
+-- ============================================
 -- SAMPLE DATA (for testing)
 -- ============================================
 
 -- Insert default admin user (password: admin123 - BCrypt hashed)
-INSERT INTO users (username, password, full_name, role, enabled) VALUES
-('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'Administrateur', 'ADMIN', TRUE);
+INSERT INTO users (username, email, password, full_name, role, enabled) VALUES
+('admin', 'admin@inovexahub.tn', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'Administrateur', 'ADMIN', TRUE);
 
 -- Insert sample client
 INSERT INTO clients (version, name, phone, email, address, tax_identification_number, credit_limit, current_debt) VALUES

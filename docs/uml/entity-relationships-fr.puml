@@ -9,6 +9,7 @@ entity "Utilisateur" as utilisateur {
   *id : BIGINT
   --
   nom_utilisateur : VARCHAR(50)
+  email : VARCHAR(100)
   mot_de_passe : VARCHAR
   nom_complet : VARCHAR(100)
   rôle : VARCHAR
@@ -181,6 +182,18 @@ entity "JetonRafraîchissement" as jeton_rafraîchissement {
   date_création : TIMESTAMP
 }
 
+entity "JetonRéinitialisation" as jeton_réinitialisation {
+  *id : BIGINT
+  --
+  utilisateur_id : BIGINT FK
+  email : VARCHAR(100)
+  code_otp_hash : VARCHAR(100) /* BCrypt hashé */
+  date_expiration : TIMESTAMP
+  utilisé : BOOLEAN
+  tentatives_échouées : INTEGER
+  date_création : TIMESTAMP
+}
+
 ' ============================================
 ' RELATIONS
 ' ============================================
@@ -188,6 +201,7 @@ entity "JetonRafraîchissement" as jeton_rafraîchissement {
 utilisateur ||..o{ document : "crée"
 utilisateur ||..o{ reçu_paiement : "enregistre"
 utilisateur ||..o{ jeton_rafraîchissement : "possède"
+utilisateur ||..o{ jeton_réinitialisation : "possède des jetons de réinitialisation"
 
 client ||..o{ document : "possède"
 client ||..o{ reçu_paiement : "effectue"

@@ -26,16 +26,20 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import tn.inovexahub.hardware_store.dto.ForgotPasswordRequest;
 import tn.inovexahub.hardware_store.dto.LoginRequest;
 import tn.inovexahub.hardware_store.dto.LoginResponse;
 import tn.inovexahub.hardware_store.dto.RefreshTokenRequest;
 import tn.inovexahub.hardware_store.dto.RegisterRequest;
+import tn.inovexahub.hardware_store.dto.ResetPasswordRequest;
 import tn.inovexahub.hardware_store.dto.UpdateUserRequest;
 import tn.inovexahub.hardware_store.entity.User;
 import tn.inovexahub.hardware_store.enums.UserRole;
+import tn.inovexahub.hardware_store.repository.PasswordResetTokenRepository;
 import tn.inovexahub.hardware_store.repository.UserRepository;
 import tn.inovexahub.hardware_store.security.JwtUtil;
 import tn.inovexahub.hardware_store.security.LoginRateLimiter;
+import tn.inovexahub.hardware_store.service.PasswordResetService;
 import tn.inovexahub.hardware_store.service.RefreshTokenService;
 
 @RestController
@@ -50,6 +54,8 @@ public class AuthController {
   private final UserDetailsService userDetailsService;
   private final PasswordEncoder passwordEncoder;
   private final LoginRateLimiter loginRateLimiter;
+  private final PasswordResetService passwordResetService;
+  private final PasswordResetTokenRepository passwordResetTokenRepository;
 
   public AuthController(
       AuthenticationManager authenticationManager,
@@ -58,7 +64,9 @@ public class AuthController {
       UserRepository userRepository,
       UserDetailsService userDetailsService,
       PasswordEncoder passwordEncoder,
-      LoginRateLimiter loginRateLimiter) {
+      LoginRateLimiter loginRateLimiter,
+      PasswordResetService passwordResetService,
+      PasswordResetTokenRepository passwordResetTokenRepository) {
     this.authenticationManager = authenticationManager;
     this.jwtUtil = jwtUtil;
     this.refreshTokenService = refreshTokenService;
@@ -66,6 +74,8 @@ public class AuthController {
     this.userDetailsService = userDetailsService;
     this.passwordEncoder = passwordEncoder;
     this.loginRateLimiter = loginRateLimiter;
+    this.passwordResetService = passwordResetService;
+    this.passwordResetTokenRepository = passwordResetTokenRepository;
   }
 
   @PostMapping("/login")
@@ -100,7 +110,7 @@ public class AuthController {
       HttpServletRequest request) {
     String clientIp = getClientIp(request);
 
-    if (loginRateLimiter.isBlocked(clientIp)) {
+    if (loginRateLimiter.isBlocked("login:" + clientIp)) {
       throw new ResponseStatusException(
           HttpStatus.TOO_MANY_REQUESTS, "Too many login attempts. Try again later.");
     }
@@ -111,7 +121,7 @@ public class AuthController {
               new UsernamePasswordAuthenticationToken(
                   loginRequest.getUsername(), loginRequest.getPassword()));
 
-      loginRateLimiter.reset(clientIp);
+      loginRateLimiter.reset("login:" + clientIp);
 
       String username = authentication.getName();
       User user =
@@ -127,7 +137,7 @@ public class AuthController {
     } catch (ResponseStatusException e) {
       throw e;
     } catch (Exception e) {
-      loginRateLimiter.recordFailure(clientIp);
+      loginRateLimiter.recordFailure("login:" + clientIp);
       throw e;
     }
   }
@@ -214,6 +224,87 @@ public class AuthController {
     return ResponseEntity.noContent().build();
   }
 
+  @PostMapping("/forgot-password")
+  @Operation(
+      summary = "Request password reset",
+      description = "Send a 6-digit OTP code to the registered email address")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "OTP sent successfully",
+            content = @Content),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Invalid request payload",
+            content = @Content),
+        @ApiResponse(responseCode = "429", description = "Too many attempts", content = @Content)
+      })
+  public ResponseEntity<Void> forgotPassword(
+      @RequestBody(description = "Email address to receive OTP", required = true)
+          @Valid
+          @org.springframework.web.bind.annotation.RequestBody
+          ForgotPasswordRequest request,
+      HttpServletRequest httpRequest) {
+    String clientIp = getClientIp(httpRequest);
+
+    if (loginRateLimiter.isBlocked("forgot:" + clientIp)) {
+      throw new ResponseStatusException(
+          HttpStatus.TOO_MANY_REQUESTS, "Too many attempts. Try again later.");
+    }
+
+    try {
+      passwordResetService.requestPasswordReset(request.getEmail());
+    } catch (IllegalArgumentException e) {
+      // Silently ignore to prevent account enumeration
+    }
+    loginRateLimiter.recordFailure("forgot:" + clientIp);
+    return ResponseEntity.ok().build();
+  }
+
+  @PostMapping("/reset-password")
+  @Operation(
+      summary = "Reset password with OTP",
+      description = "Validate the OTP and set a new password")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Password reset successfully",
+            content = @Content),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Invalid/expired OTP or request payload",
+            content = @Content),
+        @ApiResponse(responseCode = "429", description = "Too many attempts", content = @Content)
+      })
+  public ResponseEntity<Void> resetPassword(
+      @RequestBody(description = "OTP code and new password", required = true)
+          @Valid
+          @org.springframework.web.bind.annotation.RequestBody
+          ResetPasswordRequest request,
+      HttpServletRequest httpRequest) {
+    String clientIp = getClientIp(httpRequest);
+
+    if (loginRateLimiter.isBlocked("reset:" + clientIp)) {
+      throw new ResponseStatusException(
+          HttpStatus.TOO_MANY_REQUESTS, "Too many attempts. Try again later.");
+    }
+
+    try {
+      String normalizedEmail = request.getEmail().toLowerCase().trim();
+      passwordResetService.resetPassword(
+          normalizedEmail, request.getOtpCode(), request.getNewPassword());
+      userRepository
+          .findByEmail(normalizedEmail)
+          .ifPresent(user -> refreshTokenService.revokeAllForUser(user.getUsername()));
+    } catch (IllegalArgumentException e) {
+      loginRateLimiter.recordFailure("reset:" + clientIp);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+    return ResponseEntity.ok().build();
+  }
+
   @PostMapping("/register")
   @Operation(
       summary = "Register new user",
@@ -245,8 +336,14 @@ public class AuthController {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists");
     }
 
+    String normalizedEmail = registerRequest.getEmail().toLowerCase().trim();
+    if (userRepository.existsByEmail(normalizedEmail)) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already exists");
+    }
+
     User user = new User();
     user.setUsername(registerRequest.getUsername());
+    user.setEmail(normalizedEmail);
     user.setPassword(passwordEncoder.encode(registerRequest.getPassword()));
     user.setFullName(registerRequest.getFullName());
     user.setRole(UserRole.EMPLOYEE);
@@ -289,6 +386,17 @@ public class AuthController {
 
     if (updateUserRequest.getFullName() != null) {
       user.setFullName(updateUserRequest.getFullName());
+    }
+    if (updateUserRequest.getEmail() != null) {
+      String normalizedEmail = updateUserRequest.getEmail().toLowerCase().trim();
+      if (!normalizedEmail.equals(user.getEmail())
+          && userRepository.existsByEmail(normalizedEmail)) {
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already exists");
+      }
+      if (!normalizedEmail.equals(user.getEmail())) {
+        passwordResetTokenRepository.revokeAllForUserId(user.getId());
+      }
+      user.setEmail(normalizedEmail);
     }
     if (updateUserRequest.getRole() != null) {
       user.setRole(UserRole.valueOf(updateUserRequest.getRole().toUpperCase()));
