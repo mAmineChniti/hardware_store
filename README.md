@@ -211,8 +211,8 @@ Le fichier `docs/database/schema.sql` contient le schéma complet de la base de 
 
 1. **Cloner le repository**
 ```bash
-git clone https://github.com/your-org/hardware-store.git
-cd hardware-store
+git clone https://github.com/mAmineChniti/hardware_store.git
+cd hardware_store
 ```
 
 2. **Configurer la base de données**
