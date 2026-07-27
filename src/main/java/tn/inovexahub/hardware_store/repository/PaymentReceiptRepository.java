@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 import tn.inovexahub.hardware_store.entity.PaymentReceipt;
 
@@ -17,4 +18,7 @@ public interface PaymentReceiptRepository extends JpaRepository<PaymentReceipt, 
   List<PaymentReceipt> findByUserId(Long userId);
 
   List<PaymentReceipt> findByPaymentDateBetween(LocalDateTime startDate, LocalDateTime endDate);
+
+  @Query(value = "SELECT nextval('seq_receipt_number')", nativeQuery = true)
+  Long getNextReceiptSequence();
 }

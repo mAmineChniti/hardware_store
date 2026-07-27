@@ -20,6 +20,7 @@ entity "User" as user {
 entity "Client" as client {
   *id : BIGINT
   --
+  version : BIGINT
   name : VARCHAR(100)
   phone : VARCHAR(20)
   email : VARCHAR(100)
@@ -51,6 +52,7 @@ entity "Supplier" as supplier {
 entity "Product" as product {
   *id : BIGINT
   --
+  version : BIGINT
   reference : VARCHAR(50)
   name : VARCHAR(100)
   description : VARCHAR(500)
@@ -92,6 +94,7 @@ entity "ProductCost" as product_cost {
 entity "Document" as document {
   *id : BIGINT
   --
+  version : BIGINT
   document_number : VARCHAR(50)
   date : TIMESTAMP
   document_type : VARCHAR
@@ -168,12 +171,23 @@ entity "AuditLog" as audit_log {
   timestamp : TIMESTAMP
 }
 
+entity "RefreshToken" as refresh_token {
+  *id : BIGINT
+  --
+  token_hash : VARCHAR(64)
+  username : VARCHAR(50)
+  expires_at : TIMESTAMP
+  revoked : BOOLEAN
+  created_at : TIMESTAMP
+}
+
 ' ============================================
 ' RELATIONSHIPS
 ' ============================================
 
 user ||..o{ document : "creates"
 user ||..o{ payment_receipt : "registers"
+user ||..o{ refresh_token : "has"
 
 client ||..o{ document : "has"
 client ||..o{ payment_receipt : "makes"

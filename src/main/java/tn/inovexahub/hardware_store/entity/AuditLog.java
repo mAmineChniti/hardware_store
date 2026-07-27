@@ -1,5 +1,6 @@
 package tn.inovexahub.hardware_store.entity;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -21,27 +22,41 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(description = "Audit log entity for tracking critical system actions")
 public class AuditLog {
 
+  @Schema(
+      description = "Unique audit log ID",
+      example = "1",
+      accessMode = Schema.AccessMode.READ_ONLY)
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
+  @Schema(description = "Username who performed the action", example = "john_doe")
   @Column(name = "username", length = 50)
   private String username;
 
+  @Schema(description = "Action performed", example = "DELETE_CLIENT")
   @Column(name = "action", nullable = false, length = 100)
   private String action;
 
+  @Schema(description = "Type of entity affected", example = "Client")
   @Column(name = "entity_type", length = 50)
   private String entityType;
 
+  @Schema(description = "ID of entity affected", example = "5")
   @Column(name = "entity_id")
   private Long entityId;
 
+  @Schema(description = "Additional details about the action", example = "Deleted client with ID 5")
   @Column(name = "details", columnDefinition = "TEXT")
   private String details;
 
+  @Schema(
+      description = "Timestamp when action was performed",
+      example = "2024-01-01T10:00:00",
+      accessMode = Schema.AccessMode.READ_ONLY)
   @Column(name = "timestamp", nullable = false)
   private LocalDateTime timestamp;
 

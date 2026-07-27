@@ -223,9 +223,7 @@ public class DocumentService {
     line.setIsDelivered(isDelivered != null ? isDelivered : false);
 
     // Snapshot unit cost at sale time for margin calculation
-    if (product != null) {
-      line.setUnitCost(product.getAveragePurchasePrice());
-    }
+    line.setUnitCost(product.getAveragePurchasePrice());
 
     // Calculate line totals
     BigDecimal lineExcludingTax = unitPrice.multiply(quantity).setScale(3, RoundingMode.HALF_UP);

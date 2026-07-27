@@ -36,5 +36,8 @@ out/
 ### VS Code ###
 .vscode/
 
+### Logs ###
+logs/
+
 ### Environment Variables ###
 .env

@@ -63,6 +63,7 @@ class Utilisateur {
 
 class Client {
   - Long id
+  - Long version
   - String nom
   - String téléphone
   - String email
@@ -96,6 +97,7 @@ class Fournisseur {
 
 class Produit {
   - Long id
+  - Long version
   - String référence
   - String nom
   - String description
@@ -104,7 +106,7 @@ class Produit {
   - TypeUnité typeUnité
   - Boolean estMatériauLourd
   - String unitéBase
-  - Double quantitéStock
+  - BigDecimal quantitéStock
   - BigDecimal prixMoyenAchat
   - BigDecimal prixSurPlace
   - BigDecimal prixLivré
@@ -118,7 +120,7 @@ class ConditionnementProduit {
   - Long id
   - Produit produit
   - String description
-  - Double quantitéParUnité
+  - BigDecimal quantitéParUnité
   - BigDecimal prixUnitaire
   - LocalDateTime dateCréation
   - LocalDateTime dateModification
@@ -139,6 +141,7 @@ class CoûtProduit {
 
 class Document {
   - Long id
+  - Long version
   - String numéroDocument
   - LocalDateTime date
   - TypeDocument typeDocument
@@ -166,8 +169,9 @@ class LigneDocument {
   - Document document
   - Produit produit
   - String descriptionConditionnement
-  - Double quantité
+  - BigDecimal quantité
   - BigDecimal prixUnitaire
+  - BigDecimal coûtUnitaire
   - BigDecimal totalLigneHorsTaxe
   - BigDecimal totalLigneTTC
   - Boolean estLivré
@@ -217,6 +221,16 @@ class JournalAudit {
   + onCreate()
 }
 
+class JetonRafraîchissement {
+  - Long id
+  - String hashJeton
+  - String nomUtilisateur
+  - LocalDateTime dateExpiration
+  - boolean révoqué
+  - LocalDateTime dateCréation
+  + onCreate()
+}
+
 ' ============================================
 ' RELATIONS
 ' ============================================
@@ -232,6 +246,7 @@ HistoriqueCrédit --> TypeTransaction : utilise
 ' Relations des entités
 Utilisateur "1" -- "*" Document : crée >
 Utilisateur "1" -- "*" ReçuPaiement : enregistre >
+Utilisateur "1" -- "*" JetonRafraîchissement : possède >
 
 Client "1" -- "*" Document : possède >
 Client "1" -- "*" ReçuPaiement : effectue >

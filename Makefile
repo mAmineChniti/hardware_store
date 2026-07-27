@@ -14,13 +14,13 @@ help: ## Show this help message
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "$(GREEN)%-20s$(NC) %s\n", $$1, $$2}'
 
-lint: ## Run linting (checkstyle + spotless check)
+lint: ## Run linting (checkstyle + spotless check + spotbugs)
 	@echo "$(BLUE)Running linting...$(NC)"
-	./gradlew checkstyleMain checkstyleTest spotlessJavaCheck
+	./gradlew lint
 
 format: ## Format code with spotless
 	@echo "$(BLUE)Formatting code...$(NC)"
-	./gradlew spotlessApply
+	./gradlew format
 
 checkstyle: ## Run checkstyle only
 	@echo "$(BLUE)Running checkstyle...$(NC)"
