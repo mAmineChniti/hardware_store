@@ -262,6 +262,9 @@ public class ReportingController {
       @Parameter(description = "Credit margin threshold", example = "100.0")
           @RequestParam(defaultValue = "100.0")
           BigDecimal threshold) {
+    if (threshold == null) {
+      threshold = new BigDecimal("100.0");
+    }
     return ResponseEntity.ok(reportingService.getClientsNearCreditLimit(threshold));
   }
 

@@ -4,9 +4,12 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import tn.inovexahub.hardware_store.entity.PasswordResetToken;
 import tn.inovexahub.hardware_store.entity.User;
 import tn.inovexahub.hardware_store.repository.PasswordResetTokenRepository;
@@ -23,6 +26,7 @@ public class PasswordResetService {
   private final EmailService emailService;
   private final PasswordEncoder passwordEncoder;
   private final ApplicationEventPublisher applicationEventPublisher;
+  private final TransactionTemplate transactionTemplate;
   private final int otpExpiryMinutes;
 
   public PasswordResetService(
@@ -31,12 +35,14 @@ public class PasswordResetService {
       EmailService emailService,
       PasswordEncoder passwordEncoder,
       ApplicationEventPublisher applicationEventPublisher,
+      TransactionTemplate transactionTemplate,
       @Value("${otp.expiry-minutes:10}") int otpExpiryMinutes) {
     this.passwordResetTokenRepository = passwordResetTokenRepository;
     this.userRepository = userRepository;
     this.emailService = emailService;
     this.passwordEncoder = passwordEncoder;
     this.applicationEventPublisher = applicationEventPublisher;
+    this.transactionTemplate = transactionTemplate;
     this.otpExpiryMinutes = otpExpiryMinutes;
   }
 
@@ -47,20 +53,36 @@ public class PasswordResetService {
       return;
     }
 
-    passwordResetTokenRepository.revokeAllActiveForUserId(user.getId());
+    transactionTemplate.executeWithoutResult(status -> issueOtp(user, email));
+  }
 
-    String otpCode = generateOtp();
-    PasswordResetToken token = new PasswordResetToken();
-    token.setUser(user);
-    token.setEmail(email);
-    token.setOtpCode(passwordEncoder.encode(otpCode));
-    token.setExpiresAt(LocalDateTime.now().plusMinutes(otpExpiryMinutes));
-    token.setUsed(false);
-    token.setFailedAttempts(0);
-    passwordResetTokenRepository.save(token);
+  private void issueOtp(User user, String email) {
+    try {
+      User lockedUser = userRepository.findByIdForUpdate(user.getId()).orElse(null);
+      if (lockedUser == null) {
+        return;
+      }
 
-    applicationEventPublisher.publishEvent(
-        new OtpEmailRequestedEvent(email, otpCode, otpExpiryMinutes));
+      passwordResetTokenRepository.revokeAllActiveForUserId(lockedUser.getId());
+
+      String otpCode = generateOtp();
+      PasswordResetToken token = new PasswordResetToken();
+      token.setUser(lockedUser);
+      token.setEmail(email);
+      token.setOtpCode(passwordEncoder.encode(otpCode));
+      token.setExpiresAt(LocalDateTime.now().plusMinutes(otpExpiryMinutes));
+      token.setUsed(false);
+      token.setFailedAttempts(0);
+      passwordResetTokenRepository.save(token);
+
+      applicationEventPublisher.publishEvent(
+          new OtpEmailRequestedEvent(email, otpCode, otpExpiryMinutes));
+    } catch (DataIntegrityViolationException
+        | ObjectOptimisticLockingFailureException
+        | org.springframework.dao.PessimisticLockingFailureException e) {
+      // Partial unique index idx_prt_active_user or pessimistic lock contention:
+      // another request inserted a token for this user concurrently — safe to ignore.
+    }
   }
 
   @Transactional(noRollbackFor = InvalidOtpException.class)
