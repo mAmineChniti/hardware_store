@@ -17,6 +17,7 @@ skinparam entity {
 entity utilisateurs {
   id BIGSERIAL PK
   nom_utilisateur VARCHAR(50) UNIQUE
+  email VARCHAR(100) UNIQUE
   mot_de_passe VARCHAR
   nom_complet VARCHAR(100)
   rôle VARCHAR(20)
@@ -178,6 +179,23 @@ entity jetons_rafraîchissement {
   date_création TIMESTAMP
 }
 
+entity jetons_réinitialisation {
+  id BIGSERIAL PK
+  utilisateur_id BIGINT FK
+  email VARCHAR(100) INDEX
+  code_otp_hash VARCHAR(100) /* BCrypt hashé */
+  date_expiration TIMESTAMP
+  utilisé BOOLEAN
+  tentatives_échouées INTEGER
+  date_création TIMESTAMP
+}
+
+note bottom of jetons_réinitialisation
+  Index partiel unique idx_prt_active_user:
+  au plus un jeton actif (non utilisé) par utilisateur
+  code_otp_hash: stocké en hash BCrypt, jamais en clair
+end note
+
 ' ============================================
 ' RELATIONS CLÉS ÉTRANGÈRES
 ' ============================================
@@ -195,6 +213,7 @@ historique_crédit }o--|| clients : "client_id"
 historique_crédit }o--o| documents : "document_id"
 historique_crédit }o--|| reçus_paiements : "reçu_paiement_id"
 jetons_rafraîchissement }o--|| utilisateurs : "nom_utilisateur"
+jetons_réinitialisation }o--|| utilisateurs : "email"
 
 ' ============================================
 ' NOTES

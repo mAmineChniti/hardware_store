@@ -19,6 +19,11 @@ spring:
     init:
       mode: always
       schema-locations: classpath:test-schema.sql
+  mail:
+    host: localhost
+    port: 25
+    username:
+    password:
   h2:
     console:
       enabled: false
@@ -27,6 +32,9 @@ logging:
   level:
     org.springframework.boot: INFO
     org.hibernate.SQL: INFO
+
+otp:
+  expiry-minutes: 10
 
 jwt:
   secret: test-secret-key-for-jwt-token-generation-must-be-at-least-256-bits-long-for-security

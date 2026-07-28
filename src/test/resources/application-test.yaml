@@ -20,6 +20,11 @@ spring:
     init:
       mode: always
       schema-locations: classpath:test-schema.sql
+  mail:
+    host: localhost
+    port: 25
+    username:
+    password:
   h2:
     console:
       enabled: true
@@ -33,6 +38,9 @@ logging:
 
 server:
   port: 8081
+
+otp:
+  expiry-minutes: 10
 
 jwt:
   secret: test-secret-key-for-testing-must-be-at-least-256-bits-long-for-security

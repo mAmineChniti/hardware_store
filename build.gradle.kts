@@ -1,10 +1,12 @@
 plugins {
     java
+    id("jacoco")
     id("org.springframework.boot") version "4.1.0"
     id("io.spring.dependency-management") version "1.1.7"
     id("com.diffplug.spotless") version "6.25.0"
     id("checkstyle")
     id("com.github.spotbugs") version "6.5.9"
+    id("io.github.ben-manes.versions") version "0.56.0"
 }
 
 group = "tn.inovexahub"
@@ -28,6 +30,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("io.jsonwebtoken:jjwt-api:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
@@ -55,6 +58,28 @@ tasks.withType<JavaCompile>().configureEach {
 tasks.withType<Test> {
     useJUnitPlatform()
     systemProperty("springdotenv.enabled", "false")
+}
+
+jacoco {
+    toolVersion = "0.8.15"
+}
+
+tasks.withType<Test>().configureEach {
+    finalizedBy("jacocoTestReport")
+}
+
+tasks.named<JacocoReport>("jacocoTestReport") {
+    reports {
+        xml.required.set(true)
+        csv.required.set(true)
+        html.required.set(true)
+    }
+}
+
+tasks.register("test-coverage") {
+    group = "verification"
+    description = "Run tests with JaCoCo coverage report"
+    dependsOn("test")
 }
 
 spotless {

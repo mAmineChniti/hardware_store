@@ -17,6 +17,7 @@ skinparam entity {
 entity users {
   id BIGSERIAL PK
   username VARCHAR(50) UNIQUE
+  email VARCHAR(100) UNIQUE
   password VARCHAR
   full_name VARCHAR(100)
   role VARCHAR(20)
@@ -178,6 +179,23 @@ entity refresh_tokens {
   created_at TIMESTAMP
 }
 
+entity password_reset_tokens {
+  id BIGSERIAL PK
+  user_id BIGINT FK
+  email VARCHAR(100) INDEX
+  otp_code_hash VARCHAR(100) /* BCrypt hashed */
+  expires_at TIMESTAMP
+  used BOOLEAN
+  failed_attempts INTEGER
+  created_at TIMESTAMP
+}
+
+note bottom of password_reset_tokens
+  Partial unique index idx_prt_active_user:
+  at most one active (unused) token per user
+  otp_code_hash: stored as BCrypt hash, never plaintext
+end note
+
 ' ============================================
 ' FOREIGN KEY RELATIONSHIPS
 ' ============================================
@@ -195,6 +213,7 @@ credit_history }o--|| clients : "client_id"
 credit_history }o--o| documents : "document_id"
 credit_history }o--|| payment_receipts : "payment_receipt_id"
 refresh_tokens }o--|| users : "username"
+password_reset_tokens }o--|| users : "email"
 
 ' ============================================
 ' NOTES

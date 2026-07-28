@@ -9,6 +9,7 @@ entity "User" as user {
   *id : BIGINT
   --
   username : VARCHAR(50)
+  email : VARCHAR(100)
   password : VARCHAR
   full_name : VARCHAR(100)
   role : VARCHAR
@@ -181,6 +182,18 @@ entity "RefreshToken" as refresh_token {
   created_at : TIMESTAMP
 }
 
+entity "PasswordResetToken" as password_reset_token {
+  *id : BIGINT
+  --
+  user_id : BIGINT FK
+  email : VARCHAR(100)
+  otp_code_hash : VARCHAR(100) /* BCrypt hashed */
+  expires_at : TIMESTAMP
+  used : BOOLEAN
+  failed_attempts : INTEGER
+  created_at : TIMESTAMP
+}
+
 ' ============================================
 ' RELATIONSHIPS
 ' ============================================
@@ -188,6 +201,7 @@ entity "RefreshToken" as refresh_token {
 user ||..o{ document : "creates"
 user ||..o{ payment_receipt : "registers"
 user ||..o{ refresh_token : "has"
+user ||..o{ password_reset_token : "has reset tokens"
 
 client ||..o{ document : "has"
 client ||..o{ payment_receipt : "makes"
