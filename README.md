@@ -1,5 +1,8 @@
 # INOVEXAHUB - Système de Gestion Commerciale et Point de Vente (POS)
 
+[![CI](https://github.com/mAmineChniti/hardware_store/actions/workflows/ci.yml/badge.svg)](https://github.com/mAmineChniti/hardware_store/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/mAmineChniti/hardware_store/branch/main/graph/badge.svg)](https://codecov.io/gh/mAmineChniti/hardware_store)
+
 Système de gestion commerciale complet pour les magasins de matériaux de construction en Tunisie, avec gestion des stocks, facturation conforme à la fiscalité tunisienne, et gestion du crédit client.
 
 ## 📋 Table des Matières
@@ -400,28 +403,28 @@ make test-coverage
 
 ## 📊 Couverture des Tests
 
-Le rapport de couverture est généré via **JaCoCo** et disponible dans `build/reports/jacoco/test/html/index.html`.
+Le rapport de couverture est généré via **JaCoCo** dans chaque build CI et disponible sur [Codecov](https://codecov.io/gh/mAmineChniti/hardware_store).
 
 ### Couverture Globale
 
 | Métrique | Couvert | Total | Couverture |
 |----------|---------|-------|------------|
-| Instructions | 1 787 | 8 218 | **21.7%** |
-| Branches | 54 | 448 | **12.1%** |
-| Lignes | 482 | 2 005 | **24.0%** |
-| Méthodes | 108 | 375 | **28.8%** |
+| Instructions | 8 247 | 8 440 | **97.7%** |
+| Branches | 407 | 462 | **88.1%** |
+| Tests | — | 515 | ✅ Tous passent |
 
 ### Couverture par Composant
 
 | Composant | Instructions | Couverture |
 |-----------|-------------|------------|
-| Security (JWT, Filtres, Config) | 437/520 | **84.0%** |
-| RefreshTokenService | 127/134 | **94.8%** |
-| PasswordResetService | 139/139 | **100%** |
-| EmailService | 25/25 | **100%** |
-| AuthController | 182/423 | **43.0%** |
-| ClientService | 194/412 | **47.1%** |
-| ProductService | 273/442 | **61.8%** |
+| AuthController | 488/496 | **98%** |
+| DocumentService | 1 138/1 174 | **97%** |
+| ProductService | 427/442 | **97%** |
+| ClientService | 397/412 | **96%** |
+| ReportingService | 1 569/1 609 | **98%** |
+| PdfGenerationService | 831/870 | **96%** |
+| PasswordResetService | 201/207 | **97%** |
+| Security (JWT, Filtres, Config) | 470/470 | **100%** |
 
 ### Générer un Rapport
 
@@ -438,8 +441,11 @@ xdg-open build/reports/jacoco/test/html/index.html
 start "" build/reports/jacoco/test/html/index.html
 ```
 
+Le rapport est également généré automatiquement dans chaque build CI et envoyé à Codecov.
+
 ### Configuration
 
 - **Plugin**: JaCoCo 0.8.15 (supporte Java 26)
 - **Rapports**: HTML, XML et CSV dans `build/reports/jacoco/test/`
 - **Auto-exécution**: Le rapport est automatiquement généré après chaque `make test`
+- **CI**: GitHub Actions envoie le rapport XML à Codecov à chaque push/PR

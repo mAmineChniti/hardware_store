@@ -5,13 +5,24 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,8 +31,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.support.TransactionTemplate;
 import tn.inovexahub.hardware_store.entity.PasswordResetToken;
 import tn.inovexahub.hardware_store.entity.User;
 import tn.inovexahub.hardware_store.enums.UserRole;
@@ -35,6 +48,7 @@ class PasswordResetServiceTest {
   @Mock private UserRepository userRepository;
   @Mock private EmailService emailService;
   @Mock private ApplicationEventPublisher applicationEventPublisher;
+  @Mock private TransactionTemplate transactionTemplate;
 
   private PasswordResetService passwordResetService;
   private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
@@ -42,6 +56,16 @@ class PasswordResetServiceTest {
 
   @BeforeEach
   void setUp() {
+    lenient()
+        .doAnswer(
+            inv -> {
+              java.util.function.Consumer<?> callback = inv.getArgument(0);
+              callback.accept(null);
+              return null;
+            })
+        .when(transactionTemplate)
+        .executeWithoutResult(any());
+
     passwordResetService =
         new PasswordResetService(
             passwordResetTokenRepository,
@@ -49,13 +73,28 @@ class PasswordResetServiceTest {
             emailService,
             passwordEncoder,
             applicationEventPublisher,
+            transactionTemplate,
             10);
+  }
+
+  @Test
+  void requestPasswordReset_UserDeletedBetweenLookupAndLock_SilentNoOp() {
+    User user = createUser("test@example.com");
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+    when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.empty());
+
+    passwordResetService.requestPasswordReset("test@example.com");
+
+    verify(passwordResetTokenRepository, never()).revokeAllActiveForUserId(any());
+    verify(passwordResetTokenRepository, never()).save(any());
+    verify(applicationEventPublisher, never()).publishEvent(any());
   }
 
   @Test
   void requestPasswordReset_ExistingEmail_SavesTokenAndPublishesEvent() {
     User user = createUser("test@example.com");
     when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+    when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
     when(passwordResetTokenRepository.save(any(PasswordResetToken.class)))
         .thenAnswer(inv -> inv.getArgument(0));
 
@@ -211,6 +250,68 @@ class PasswordResetServiceTest {
     assertEquals("User not found", ex.getMessage());
   }
 
+  @Test
+  void requestPasswordReset_ConcurrentRequests_OnlyOneActiveToken() throws Exception {
+    User user = createUser("test@example.com");
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+    when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
+
+    List<PasswordResetToken> savedTokens = new CopyOnWriteArrayList<>();
+    when(passwordResetTokenRepository.save(any(PasswordResetToken.class)))
+        .thenAnswer(
+            inv -> {
+              PasswordResetToken t = inv.getArgument(0);
+              savedTokens.add(t);
+              return t;
+            });
+
+    int threadCount = 5;
+    ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+    CountDownLatch startLatch = new CountDownLatch(1);
+    CountDownLatch doneLatch = new CountDownLatch(threadCount);
+    List<Future<?>> futures = new ArrayList<>();
+
+    for (int i = 0; i < threadCount; i++) {
+      futures.add(
+          executor.submit(
+              () -> {
+                try {
+                  if (!startLatch.await(5, TimeUnit.SECONDS)) {
+                    return;
+                  }
+                  passwordResetService.requestPasswordReset("test@example.com");
+                } catch (InterruptedException ie) {
+                  Thread.currentThread().interrupt();
+                } finally {
+                  doneLatch.countDown();
+                }
+              }));
+    }
+
+    startLatch.countDown();
+    if (!doneLatch.await(10, TimeUnit.SECONDS)) {
+      executor.shutdownNow();
+      fail("Timed out waiting for concurrent threads");
+    }
+    executor.shutdown();
+
+    // All threads should complete without throwing (concurrent constraint violations are caught)
+    for (Future<?> f : futures) {
+      f.get();
+    }
+
+    // Each call should have issued exactly one token via save()
+    assertEquals(threadCount, savedTokens.size());
+
+    // All saved tokens should reference the same user
+    for (PasswordResetToken t : savedTokens) {
+      assertEquals(user.getId(), t.getUser().getId());
+    }
+
+    // RevokeAll should have been called for each request (serialized by the lock)
+    verify(passwordResetTokenRepository, atLeastOnce()).revokeAllActiveForUserId(1L);
+  }
+
   private String eventOtpCode(PasswordResetToken savedToken) {
     ArgumentCaptor<OtpEmailRequestedEvent> captor =
         ArgumentCaptor.forClass(OtpEmailRequestedEvent.class);
@@ -228,6 +329,20 @@ class PasswordResetServiceTest {
     token.setUsed(false);
     token.setFailedAttempts(0);
     return token;
+  }
+
+  @Test
+  void requestPasswordReset_DataIntegrityViolation_SilentlyIgnored() {
+    User user = createUser("test@example.com");
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+    when(userRepository.findByIdForUpdate(1L))
+        .thenThrow(new DataIntegrityViolationException("concurrent insert"));
+
+    // Should not throw
+    passwordResetService.requestPasswordReset("test@example.com");
+
+    // No token should be saved since the exception was caught
+    verify(passwordResetTokenRepository, never()).save(any());
   }
 
   private User createUser(String email) {

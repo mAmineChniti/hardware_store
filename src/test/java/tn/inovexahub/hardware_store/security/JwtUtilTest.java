@@ -129,4 +129,39 @@ class JwtUtilTest {
   void getRefreshExpirationMs_ReturnsConfiguredValue() {
     assertEquals(1800000L, jwtUtil.getRefreshExpirationMs());
   }
+
+  @Test
+  void validateAccessTokenAndGetUsername_ValidToken_ReturnsUsername() {
+    String token = jwtUtil.generateAccessToken("testuser");
+
+    String username = jwtUtil.validateAccessTokenAndGetUsername(token);
+
+    assertEquals("testuser", username);
+  }
+
+  @Test
+  void validateAccessTokenAndGetUsername_RefreshTokenType_ReturnsNull() {
+    String refreshToken = jwtUtil.generateRefreshToken("testuser");
+
+    String username = jwtUtil.validateAccessTokenAndGetUsername(refreshToken);
+
+    assertEquals(null, username);
+  }
+
+  @Test
+  void validateAccessTokenAndGetUsername_ExpiredToken_ReturnsNull() {
+    ReflectionTestUtils.setField(jwtUtil, "accessExpiration", -1000L);
+    String token = jwtUtil.generateAccessToken("testuser");
+
+    String username = jwtUtil.validateAccessTokenAndGetUsername(token);
+
+    assertEquals(null, username);
+  }
+
+  @Test
+  void validateAccessTokenAndGetUsername_InvalidToken_ReturnsNull() {
+    String username = jwtUtil.validateAccessTokenAndGetUsername("invalid.token.here");
+
+    assertEquals(null, username);
+  }
 }

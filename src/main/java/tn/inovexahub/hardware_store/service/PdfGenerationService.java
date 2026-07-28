@@ -26,8 +26,18 @@ public class PdfGenerationService {
   private static final float LINE_HEIGHT = 20;
   private static final float TABLE_ROW_HEIGHT = 25;
 
+  private record PaginationResult(PDPageContentStream contentStream, float yPosition) {}
+
   private NumberFormat getCurrencyFormat() {
-    return NumberFormat.getCurrencyInstance(Locale.FRANCE);
+    NumberFormat fmt = NumberFormat.getNumberInstance(Locale.FRANCE);
+    fmt.setMinimumFractionDigits(3);
+    fmt.setMaximumFractionDigits(3);
+    return fmt;
+  }
+
+  private String formatCurrency(NumberFormat fmt, BigDecimal value) {
+    String formatted = fmt.format(value);
+    return formatted.replace('\u202F', ' ');
   }
 
   /**
@@ -57,7 +67,10 @@ public class PdfGenerationService {
       yPosition = drawTableHeader(contentStream, yPosition);
 
       // Draw document lines with page continuation support
-      yPosition = drawDocumentLinesWithPagination(doc, contentStream, document, yPosition, page);
+      PaginationResult paginationResult =
+          drawDocumentLinesWithPagination(doc, contentStream, document, yPosition, page);
+      contentStream = paginationResult.contentStream();
+      yPosition = paginationResult.yPosition();
 
       // Draw totals on the current page
       yPosition = drawTotals(contentStream, document, yPosition);
@@ -181,7 +194,7 @@ public class PdfGenerationService {
     return yPosition - TABLE_ROW_HEIGHT;
   }
 
-  private float drawDocumentLinesWithPagination(
+  private PaginationResult drawDocumentLinesWithPagination(
       PDDocument doc,
       PDPageContentStream contentStream,
       Document document,
@@ -242,13 +255,13 @@ public class PdfGenerationService {
       // Unit price
       contentStream.beginText();
       contentStream.newLineAtOffset(columnPositions[3], yPosition);
-      contentStream.showText(getCurrencyFormat().format(line.getUnitPrice()));
+      contentStream.showText(formatCurrency(getCurrencyFormat(), line.getUnitPrice()));
       contentStream.endText();
 
       // Total
       contentStream.beginText();
       contentStream.newLineAtOffset(columnPositions[4], yPosition);
-      contentStream.showText(getCurrencyFormat().format(line.getTotalLineExcludingTax()));
+      contentStream.showText(formatCurrency(getCurrencyFormat(), line.getTotalLineExcludingTax()));
       contentStream.endText();
 
       yPosition -= TABLE_ROW_HEIGHT;
@@ -259,7 +272,7 @@ public class PdfGenerationService {
     contentStream.lineTo(PDRectangle.A4.getWidth() - MARGIN, yPosition);
     contentStream.stroke();
 
-    return yPosition - LINE_HEIGHT;
+    return new PaginationResult(contentStream, yPosition - LINE_HEIGHT);
   }
 
   private float drawTotals(PDPageContentStream contentStream, Document document, float yPosition)
@@ -273,7 +286,7 @@ public class PdfGenerationService {
     contentStream.beginText();
     contentStream.newLineAtOffset(totalsX, yPosition);
     contentStream.showText(
-        "Total HT: " + getCurrencyFormat().format(document.getTotalExcludingTax()));
+        "Total HT: " + formatCurrency(getCurrencyFormat(), document.getTotalExcludingTax()));
     contentStream.endText();
 
     // TVA
@@ -282,7 +295,10 @@ public class PdfGenerationService {
     contentStream.newLineAtOffset(totalsX, yPosition);
     BigDecimal vatPercentage = document.getVatRate().multiply(BigDecimal.valueOf(100));
     contentStream.showText(
-        "TVA (" + vatPercentage + "%): " + getCurrencyFormat().format(document.getTotalVat()));
+        "TVA ("
+            + vatPercentage
+            + "%): "
+            + formatCurrency(getCurrencyFormat(), document.getTotalVat()));
     contentStream.endText();
 
     // Transport fee (for BL and Invoice)
@@ -292,7 +308,12 @@ public class PdfGenerationService {
       contentStream.beginText();
       contentStream.newLineAtOffset(totalsX, yPosition);
       contentStream.showText(
-          "Frais Transport: " + getCurrencyFormat().format(document.getTransportFee()));
+          "Frais Transport: "
+              + formatCurrency(
+                  getCurrencyFormat(),
+                  document.getTransportFee() != null
+                      ? document.getTransportFee()
+                      : BigDecimal.ZERO));
       contentStream.endText();
     }
 
@@ -302,7 +323,10 @@ public class PdfGenerationService {
       contentStream.beginText();
       contentStream.newLineAtOffset(totalsX, yPosition);
       contentStream.showText(
-          "Droit Timbre: " + getCurrencyFormat().format(document.getStampDuty()));
+          "Droit Timbre: "
+              + formatCurrency(
+                  getCurrencyFormat(),
+                  document.getStampDuty() != null ? document.getStampDuty() : BigDecimal.ZERO));
       contentStream.endText();
     }
 
@@ -312,7 +336,7 @@ public class PdfGenerationService {
     contentStream.beginText();
     contentStream.newLineAtOffset(totalsX, yPosition);
     contentStream.showText(
-        "Total TTC: " + getCurrencyFormat().format(document.getTotalIncludingTax()));
+        "Total TTC: " + formatCurrency(getCurrencyFormat(), document.getTotalIncludingTax()));
     contentStream.endText();
 
     // Credit sale indicator

@@ -411,6 +411,9 @@ public class ClientController {
       @Parameter(description = "Threshold amount remaining until credit limit", example = "100.0")
           @RequestParam(defaultValue = "100.0")
           BigDecimal threshold) {
+    if (threshold == null) {
+      threshold = new BigDecimal("100.0");
+    }
     return ResponseEntity.ok(clientService.getClientsNearCreditLimit(threshold));
   }
 }
