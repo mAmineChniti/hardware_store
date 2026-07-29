@@ -9,8 +9,20 @@ services:
         value: prod
       - key: APP_PORT
         value: 8080
+      - key: DB_HOSTNAME
+        fromDatabase:
+          name: hardware-store-db
+          property: hostname
+      - key: DB_PORT
+        fromDatabase:
+          name: hardware-store-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: hardware-store-db
+          property: database
       - key: SPRING_DATASOURCE_URL
-        value: jdbc:postgresql://${HARDWARE_STORE_DB_HOSTNAME}:${HARDWARE_STORE_DB_PORT}/${HARDWARE_STORE_DB_DATABASE}
+        value: jdbc:postgresql://${DB_HOSTNAME}:${DB_PORT}/${DB_NAME}
       - key: SPRING_DATASOURCE_USERNAME
         fromDatabase:
           name: hardware-store-db
