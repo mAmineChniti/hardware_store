@@ -21,8 +21,6 @@ services:
         fromDatabase:
           name: hardware-store-db
           property: database
-      - key: SPRING_DATASOURCE_URL
-        sync: false
       - key: SPRING_DATASOURCE_USERNAME
         fromDatabase:
           name: hardware-store-db
