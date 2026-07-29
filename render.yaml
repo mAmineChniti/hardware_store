@@ -22,7 +22,7 @@ services:
           name: hardware-store-db
           property: database
       - key: SPRING_DATASOURCE_URL
-        value: jdbc:postgresql://${DB_HOSTNAME}:${DB_PORT}/${DB_NAME}
+        sync: false
       - key: SPRING_DATASOURCE_USERNAME
         fromDatabase:
           name: hardware-store-db
