@@ -15,12 +15,20 @@ import lombok.NoArgsConstructor;
 public class RegisterRequest {
 
   @Schema(
-      description = "User's username (3-50 characters)",
-      example = "jane_smith",
+      description = "User's first name",
+      example = "Jane",
       requiredMode = Schema.RequiredMode.REQUIRED)
-  @NotBlank(message = "Username is required")
-  @Size(min = 3, max = 50, message = "Username must be between 3 and 50 characters")
-  private String username;
+  @NotBlank(message = "First name is required")
+  @Size(max = 50, message = "First name must not exceed 50 characters")
+  private String firstName;
+
+  @Schema(
+      description = "User's last name",
+      example = "Smith",
+      requiredMode = Schema.RequiredMode.REQUIRED)
+  @NotBlank(message = "Last name is required")
+  @Size(max = 50, message = "Last name must not exceed 50 characters")
+  private String lastName;
 
   @Schema(
       description = "User's email address",
@@ -38,12 +46,4 @@ public class RegisterRequest {
   @NotBlank(message = "Password is required")
   @Size(min = 6, message = "Password must be at least 6 characters")
   private String password;
-
-  @Schema(
-      description = "User's full name",
-      example = "Jane Smith",
-      requiredMode = Schema.RequiredMode.REQUIRED)
-  @NotBlank(message = "Full name is required")
-  @Size(max = 100, message = "Full name must not exceed 100 characters")
-  private String fullName;
 }

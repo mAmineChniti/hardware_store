@@ -57,13 +57,13 @@ class ClientControllerTest {
     return client;
   }
 
-  private User createUser(Long id, String username) {
+  private User createUser(Long id, String email) {
     User user = new User();
     user.setId(id);
-    user.setUsername(username);
-    user.setEmail(username + "@example.com");
+    user.setFirstName("Test");
+    user.setLastName("User");
+    user.setEmail(email);
     user.setPassword("encodedPassword");
-    user.setFullName("Test User");
     user.setRole(UserRole.EMPLOYEE);
     user.setEnabled(true);
     return user;
@@ -344,7 +344,7 @@ class ClientControllerTest {
   @Test
   void processPayment_Success_ReturnsCreated() {
     Client client = createClient(1L, "Ahmed");
-    User user = createUser(1L, "admin");
+    User user = createUser(1L, "admin@example.com");
     PaymentReceipt receipt = createPaymentReceipt(1L);
 
     when(clientService.getClientById(1L)).thenReturn(Optional.of(client));
@@ -377,7 +377,7 @@ class ClientControllerTest {
   @Test
   void processPayment_InvalidPaymentExceedsDebt_ThrowsBadRequest() {
     Client client = createClient(1L, "Ahmed");
-    User user = createUser(1L, "admin");
+    User user = createUser(1L, "admin@example.com");
 
     when(clientService.getClientById(1L)).thenReturn(Optional.of(client));
     when(userRepository.findById(1L)).thenReturn(Optional.of(user));

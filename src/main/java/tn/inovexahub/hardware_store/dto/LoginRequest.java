@@ -1,6 +1,7 @@
 package tn.inovexahub.hardware_store.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -13,11 +14,12 @@ import lombok.NoArgsConstructor;
 public class LoginRequest {
 
   @Schema(
-      description = "User's username",
-      example = "john_doe",
+      description = "User's email address",
+      example = "john.doe@example.com",
       requiredMode = Schema.RequiredMode.REQUIRED)
-  @NotBlank(message = "Username is required")
-  private String username;
+  @NotBlank(message = "Email is required")
+  @Email(message = "Must be a valid email address")
+  private String email;
 
   @Schema(
       description = "User's password",

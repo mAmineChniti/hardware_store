@@ -50,10 +50,10 @@ enum TransactionType {
 
 class User {
   - Long id
-  - String username
+  - String firstName
+  - String lastName
   - String email
   - String password
-  - String fullName
   - UserRole role
   - Boolean enabled
   - LocalDateTime createdAt
@@ -214,7 +214,8 @@ class CreditHistory {
 
 class AuditLog {
   - Long id
-  - String username
+  - Long userId
+  - String email
   - String action
   - String entityType
   - Long entityId
@@ -223,10 +224,24 @@ class AuditLog {
   + onCreate()
 }
 
+' AuditLog.userId is an OPTIONAL identity snapshot: nullable scalar, no JPA association to
+' User (no User <-> AuditLog relation on purpose). email is the display snapshot at action time.
+' Audit rows may lack a user or outlive a deleted user.
+
 class RefreshToken {
   - Long id
   - String tokenHash
-  - String username
+  - Long userId
+  - LocalDateTime expiresAt
+  - boolean revoked
+  - LocalDateTime createdAt
+  + onCreate()
+}
+
+class AccessToken {
+  - Long id
+  - String tokenHash
+  - Long userId
   - LocalDateTime expiresAt
   - boolean revoked
   - LocalDateTime createdAt
@@ -263,24 +278,25 @@ PaymentReceipt --> PaymentMethod : uses
 CreditHistory --> TransactionType : uses
 
 ' Entity relationships
-User "1" -- "*" Document : creates >
-User "1" -- "*" PaymentReceipt : registers >
+User "0..1" -- "*" Document : creates >
+User "0..1" -- "*" PaymentReceipt : registers >
 User "1" -- "*" RefreshToken : has >
+User "1" -- "*" AccessToken : has >
 User "1" -- "*" PasswordResetToken : has reset tokens >
 
-Client "1" -- "*" Document : has >
+Client "0..1" -- "*" Document : has >
 Client "1" -- "*" PaymentReceipt : makes >
 Client "1" -- "*" CreditHistory : has >
 
 Product "1" -- "*" ProductConditioning : has >
 Product "1" -- "*" ProductCost : has cost history >
-Product "1" -- "*" DocumentLine : appears in >
+Product "0..1" -- "*" DocumentLine : appears in >
 
-Supplier "1" -- "*" ProductCost : provides costs for >
+Supplier "0..1" -- "*" ProductCost : provides costs for >
 
 Document "1" -- "*" DocumentLine : contains >
-Document "1" -- "*" CreditHistory : generates (if credit sale) >
+Document "0..1" -- "0..*" CreditHistory : generates (if credit sale) >
 
-PaymentReceipt "1" -- "1" CreditHistory : generates >
+PaymentReceipt "0..1" -- "0..1" CreditHistory : generates >
 
 @enduml

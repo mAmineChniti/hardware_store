@@ -16,10 +16,10 @@ skinparam entity {
 
 entity utilisateurs {
   id BIGSERIAL PK
-  nom_utilisateur VARCHAR(50) UNIQUE
-  email VARCHAR(100) UNIQUE
+  prénom VARCHAR(50)
+  nom VARCHAR(50)
+  email VARCHAR(100) UNIQUE CHECK (email = LOWER(email))
   mot_de_passe VARCHAR
-  nom_complet VARCHAR(100)
   rôle VARCHAR(20)
   activé BOOLEAN
   date_création TIMESTAMP
@@ -162,7 +162,8 @@ entity historique_crédit {
 
 entity journal_audit {
   id BIGSERIAL PK
-  nom_utilisateur VARCHAR(50)
+  utilisateur_id BIGINT /* instantané d'identité facultatif, sans FK */
+  email VARCHAR(100)
   action VARCHAR(100)
   type_entité VARCHAR(50)
   id_entité BIGINT
@@ -170,10 +171,25 @@ entity journal_audit {
   horodatage TIMESTAMP
 }
 
+note right of journal_audit
+  utilisateur_id: instantané d'identité FACULTATIF (nullable, sans FK)
+  email: instantané de l'email de l'utilisateur au moment de l'action
+  Une entrée d'audit peut n'avoir aucun utilisateur ou survivre à un utilisateur supprimé
+end note
+
 entity jetons_rafraîchissement {
   id BIGSERIAL PK
   hash_jeton VARCHAR(64) UNIQUE
-  nom_utilisateur VARCHAR(50)
+  utilisateur_id BIGINT FK
+  date_expiration TIMESTAMP
+  révoqué BOOLEAN
+  date_création TIMESTAMP
+}
+
+entity jetons_accès {
+  id BIGSERIAL PK
+  hash_jeton VARCHAR(64) UNIQUE
+  utilisateur_id BIGINT FK
   date_expiration TIMESTAMP
   révoqué BOOLEAN
   date_création TIMESTAMP
@@ -203,17 +219,18 @@ end note
 conditionnements_produits }o--|| produits : "produit_id"
 coûts_produits }o--|| produits : "produit_id"
 coûts_produits }o--o| fournisseurs : "fournisseur_id"
-documents }o--|| clients : "client_id"
-documents }o--|| utilisateurs : "utilisateur_id"
+documents }o--o| clients : "client_id"
+documents }o--o| utilisateurs : "utilisateur_id"
 lignes_documents }o--|| documents : "document_id"
 lignes_documents }o--o| produits : "produit_id"
 reçus_paiements }o--|| clients : "client_id"
 reçus_paiements }o--o| utilisateurs : "utilisateur_id"
 historique_crédit }o--|| clients : "client_id"
 historique_crédit }o--o| documents : "document_id"
-historique_crédit }o--|| reçus_paiements : "reçu_paiement_id"
-jetons_rafraîchissement }o--|| utilisateurs : "nom_utilisateur"
-jetons_réinitialisation }o--|| utilisateurs : "email"
+historique_crédit }o--o| reçus_paiements : "reçu_paiement_id"
+jetons_rafraîchissement }o--|| utilisateurs : "utilisateur_id"
+jetons_accès }o--|| utilisateurs : "utilisateur_id"
+jetons_réinitialisation }o--|| utilisateurs : "utilisateur_id"
 
 ' ============================================
 ' NOTES

@@ -50,10 +50,10 @@ enum TypeTransaction {
 
 class Utilisateur {
   - Long id
-  - String nomUtilisateur
+  - String prenom
+  - String nom
   - String email
   - String motDePasse
-  - String nomComplet
   - RoleUtilisateur role
   - Boolean activé
   - LocalDateTime dateCréation
@@ -214,7 +214,8 @@ class HistoriqueCrédit {
 
 class JournalAudit {
   - Long id
-  - String nomUtilisateur
+  - Long utilisateurId
+  - String email
   - String action
   - String typeEntité
   - Long idEntité
@@ -223,10 +224,25 @@ class JournalAudit {
   + onCreate()
 }
 
+' JournalAudit.utilisateurId est un instantané d'identité FACULTATIF : scalaire nullable, aucune
+' association JPA avec Utilisateur (aucune relation Utilisateur <-> JournalAudit, volontairement).
+' email est l'instantané d'affichage au moment de l'action. Une entrée d'audit peut n'avoir aucun
+' utilisateur ou survivre à un utilisateur supprimé.
+
 class JetonRafraîchissement {
   - Long id
   - String hashJeton
-  - String nomUtilisateur
+  - Long utilisateurId
+  - LocalDateTime dateExpiration
+  - boolean révoqué
+  - LocalDateTime dateCréation
+  + onCreate()
+}
+
+class JetonAccès {
+  - Long id
+  - String hashJeton
+  - Long utilisateurId
   - LocalDateTime dateExpiration
   - boolean révoqué
   - LocalDateTime dateCréation
@@ -263,24 +279,25 @@ ReçuPaiement --> ModePaiement : utilise
 HistoriqueCrédit --> TypeTransaction : utilise
 
 ' Relations des entités
-Utilisateur "1" -- "*" Document : crée >
-Utilisateur "1" -- "*" ReçuPaiement : enregistre >
+Utilisateur "0..1" -- "*" Document : crée >
+Utilisateur "0..1" -- "*" ReçuPaiement : enregistre >
 Utilisateur "1" -- "*" JetonRafraîchissement : possède >
+Utilisateur "1" -- "*" JetonAccès : possède >
 Utilisateur "1" -- "*" JetonRéinitialisation : possède des jetons de réinitialisation >
 
-Client "1" -- "*" Document : possède >
+Client "0..1" -- "*" Document : possède >
 Client "1" -- "*" ReçuPaiement : effectue >
 Client "1" -- "*" HistoriqueCrédit : possède >
 
 Produit "1" -- "*" ConditionnementProduit : possède >
 Produit "1" -- "*" CoûtProduit : possède historique coûts >
-Produit "1" -- "*" LigneDocument : apparaît dans >
+Produit "0..1" -- "*" LigneDocument : apparaît dans >
 
-Fournisseur "1" -- "*" CoûtProduit : fournit coûts pour >
+Fournisseur "0..1" -- "*" CoûtProduit : fournit coûts pour >
 
 Document "1" -- "*" LigneDocument : contient >
-Document "1" -- "*" HistoriqueCrédit : génère (si vente crédit) >
+Document "0..1" -- "0..*" HistoriqueCrédit : génère (si vente crédit) >
 
-ReçuPaiement "1" -- "1" HistoriqueCrédit : génère >
+ReçuPaiement "0..1" -- "0..1" HistoriqueCrédit : génère >
 
 @enduml

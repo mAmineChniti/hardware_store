@@ -348,10 +348,10 @@ class PasswordResetServiceTest {
   private User createUser(String email) {
     User user = new User();
     user.setId(1L);
-    user.setUsername("testuser");
+    user.setFirstName("Test");
+    user.setLastName("User");
     user.setEmail(email);
     user.setPassword("encodedPassword");
-    user.setFullName("Test User");
     user.setRole(UserRole.EMPLOYEE);
     user.setEnabled(true);
     return user;
