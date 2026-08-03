@@ -8,10 +8,10 @@ skinparam linetype ortho
 entity "User" as user {
   *id : BIGINT
   --
-  username : VARCHAR(50)
+  first_name : VARCHAR(50)
+  last_name : VARCHAR(50)
   email : VARCHAR(100)
   password : VARCHAR
-  full_name : VARCHAR(100)
   role : VARCHAR
   enabled : BOOLEAN
   created_at : TIMESTAMP
@@ -164,7 +164,8 @@ entity "CreditHistory" as credit_history {
 entity "AuditLog" as audit_log {
   *id : BIGINT
   --
-  username : VARCHAR(50)
+  user_id : BIGINT /* optional identity snapshot, no FK */
+  email : VARCHAR(100)
   action : VARCHAR(100)
   entity_type : VARCHAR(50)
   entity_id : BIGINT
@@ -172,11 +173,27 @@ entity "AuditLog" as audit_log {
   timestamp : TIMESTAMP
 }
 
+note right of audit_log
+  user_id is an OPTIONAL identity snapshot (nullable, no FK);
+  email mirrors the user's email at action time.
+  Audit rows may lack a user or outlive a deleted user.
+end note
+
 entity "RefreshToken" as refresh_token {
   *id : BIGINT
   --
   token_hash : VARCHAR(64)
-  username : VARCHAR(50)
+  user_id : BIGINT FK
+  expires_at : TIMESTAMP
+  revoked : BOOLEAN
+  created_at : TIMESTAMP
+}
+
+entity "AccessToken" as access_token {
+  *id : BIGINT
+  --
+  token_hash : VARCHAR(64)
+  user_id : BIGINT FK
   expires_at : TIMESTAMP
   revoked : BOOLEAN
   created_at : TIMESTAMP
@@ -198,24 +215,26 @@ entity "PasswordResetToken" as password_reset_token {
 ' RELATIONSHIPS
 ' ============================================
 
-user ||..o{ document : "creates"
-user ||..o{ payment_receipt : "registers"
+user |o..o{ document : "creates"
+user |o..o{ payment_receipt : "registers"
 user ||..o{ refresh_token : "has"
+user ||..o{ access_token : "has"
 user ||..o{ password_reset_token : "has reset tokens"
+user |o..o{ audit_log : "performs"
 
-client ||..o{ document : "has"
+client |o..o{ document : "has"
 client ||..o{ payment_receipt : "makes"
 client ||..o{ credit_history : "has"
 
 product ||..o{ conditioning : "has"
 product ||..o{ product_cost : "has cost history"
-product ||..o{ document_line : "appears in"
+product |o..o{ document_line : "appears in"
 
-supplier ||..o{ product_cost : "provides costs for"
+supplier |o..o{ product_cost : "provides costs for"
 
 document ||..o{ document_line : "contains"
 document |o..o{ credit_history : "generates (credit)"
 
-payment_receipt |o--|| credit_history : "generates"
+payment_receipt |o--o| credit_history : "generates"
 
 @enduml

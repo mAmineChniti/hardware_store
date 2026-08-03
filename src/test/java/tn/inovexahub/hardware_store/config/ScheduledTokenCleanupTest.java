@@ -10,12 +10,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import tn.inovexahub.hardware_store.repository.AccessTokenRepository;
 import tn.inovexahub.hardware_store.repository.RefreshTokenRepository;
 
 @ExtendWith(MockitoExtension.class)
 class ScheduledTokenCleanupTest {
 
   @Mock private RefreshTokenRepository refreshTokenRepository;
+  @Mock private AccessTokenRepository accessTokenRepository;
 
   @InjectMocks private ScheduledTokenCleanup scheduledTokenCleanup;
 
@@ -35,5 +37,23 @@ class ScheduledTokenCleanupTest {
     scheduledTokenCleanup.deleteExpiredRefreshTokens();
 
     verify(refreshTokenRepository).deleteByExpiresAtBefore(any(LocalDateTime.class));
+  }
+
+  @Test
+  void deleteExpiredAccessTokens_zeroDeleted() {
+    when(accessTokenRepository.deleteByExpiresAtBefore(any(LocalDateTime.class))).thenReturn(0L);
+
+    scheduledTokenCleanup.deleteExpiredAccessTokens();
+
+    verify(accessTokenRepository).deleteByExpiresAtBefore(any(LocalDateTime.class));
+  }
+
+  @Test
+  void deleteExpiredAccessTokens_positiveDeleted() {
+    when(accessTokenRepository.deleteByExpiresAtBefore(any(LocalDateTime.class))).thenReturn(5L);
+
+    scheduledTokenCleanup.deleteExpiredAccessTokens();
+
+    verify(accessTokenRepository).deleteByExpiresAtBefore(any(LocalDateTime.class));
   }
 }

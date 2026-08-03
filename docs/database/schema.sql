@@ -31,18 +31,16 @@ CREATE SEQUENCE IF NOT EXISTS seq_receipt_number START 1 INCREMENT 1;
 -- ============================================
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL CHECK (email = LOWER(email)),
     password VARCHAR NOT NULL, -- BCrypt hashed
-    full_name VARCHAR(100) NOT NULL,
     role VARCHAR(20) NOT NULL CHECK (role IN ('ADMIN', 'EMPLOYEE')),
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP
 );
 
--- Index on username for fast authentication
-CREATE INDEX idx_users_username ON users(username);
 -- Index on email for fast authentication
 CREATE INDEX idx_users_email ON users(email);
 
@@ -297,9 +295,14 @@ CREATE INDEX idx_credit_history_transaction_type ON credit_history(transaction_t
 -- TABLE: audit_logs
 -- Section 6.3: Sécurité Logicielle
 -- ============================================
+-- user_id is an OPTIONAL identity snapshot (nullable, no FK) paired with an email
+-- snapshot. Audit rows deliberately retain identity even if the acting user is later
+-- deleted, and system-triggered actions may have no user at all. There is intentionally
+-- NO foreign key from audit_logs to users.
 CREATE TABLE audit_logs (
     id BIGSERIAL PRIMARY KEY,
-    username VARCHAR(50),
+    user_id BIGINT,
+    email VARCHAR(100),
     action VARCHAR(100) NOT NULL,
     entity_type VARCHAR(50),
     entity_id BIGINT,
@@ -316,23 +319,48 @@ CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
 -- TABLE: refresh_tokens
 -- Section 6.1: JWT Refresh Token Management
 -- ============================================
+-- Tokens are bound to the immutable user ID rather than the (mutable) email.
+-- When a user changes email via PUT /api/auth/me, all active refresh tokens for
+-- that user are revoked; they are never re-bound to a different identity.
 CREATE TABLE refresh_tokens (
     id BIGSERIAL PRIMARY KEY,
     token_hash VARCHAR(64) UNIQUE NOT NULL, -- SHA-256 hash of the refresh token
-    username VARCHAR(50) NOT NULL,
+    user_id BIGINT NOT NULL,
     expires_at TIMESTAMP NOT NULL,
     revoked BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (username) REFERENCES users(username)
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Index on username for bulk revocation
-CREATE INDEX idx_refresh_tokens_username ON refresh_tokens(username);
+-- Index on user_id for bulk revocation
+CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+
+-- ============================================
+-- TABLE: access_tokens
+-- Section 6.1: JWT Access Token Revocation
+-- ============================================
+-- Server-side allowlist of issued access tokens. Tokens are bound to the immutable user
+-- ID; when the email changes (PUT /api/auth/me) all active records for the user are
+-- revoked, immediately invalidating already-issued access tokens.
+CREATE TABLE access_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    token_hash VARCHAR(64) UNIQUE NOT NULL, -- SHA-256 hash of the access token
+    user_id BIGINT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Index on user_id for bulk revocation
+CREATE INDEX idx_access_tokens_user_id ON access_tokens(user_id);
 
 -- ============================================
 -- TABLE: password_reset_tokens
 -- Section 6.2: Password Reset OTP Management
 -- ============================================
+-- Email is a mutable snapshot, not a foreign key: ownership is tracked via the
+-- immutable user_id so email changes (PUT /api/auth/me) never violate a constraint.
 CREATE TABLE password_reset_tokens (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
@@ -342,8 +370,7 @@ CREATE TABLE password_reset_tokens (
     used BOOLEAN NOT NULL DEFAULT FALSE,
     failed_attempts INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (email) REFERENCES users(email) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Index on user_id for fast lookup during reset and bulk revocation
@@ -356,10 +383,6 @@ CREATE UNIQUE INDEX idx_prt_active_user ON password_reset_tokens(user_id) WHERE 
 -- ============================================
 -- SAMPLE DATA (for testing)
 -- ============================================
-
--- Insert default admin user (password: admin123 - BCrypt hashed)
-INSERT INTO users (username, email, password, full_name, role, enabled) VALUES
-('admin', 'admin@inovexahub.tn', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'Administrateur', 'ADMIN', TRUE);
 
 -- Insert sample client
 INSERT INTO clients (version, name, phone, email, address, tax_identification_number, credit_limit, current_debt) VALUES

@@ -30,13 +30,13 @@ public class JwtUtil {
     return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
   }
 
-  public String generateAccessToken(String username) {
+  public String generateAccessToken(Long userId) {
     Date now = new Date();
     Date expiryDate = new Date(now.getTime() + accessExpiration);
 
     return Jwts.builder()
         .id(UUID.randomUUID().toString())
-        .subject(username)
+        .subject(String.valueOf(userId))
         .claim(TOKEN_TYPE_CLAIM, ACCESS_TOKEN_TYPE)
         .issuedAt(now)
         .expiration(expiryDate)
@@ -44,7 +44,7 @@ public class JwtUtil {
         .compact();
   }
 
-  public String generateRefreshToken(String username) {
+  public String generateRefreshToken(Long userId) {
     Date now = new Date();
     Date expiryDate = new Date(now.getTime() + refreshExpiration);
 
@@ -52,7 +52,7 @@ public class JwtUtil {
     // same second, since refresh tokens are persisted and uniquely identified by their hash.
     return Jwts.builder()
         .id(UUID.randomUUID().toString())
-        .subject(username)
+        .subject(String.valueOf(userId))
         .claim(TOKEN_TYPE_CLAIM, REFRESH_TOKEN_TYPE)
         .issuedAt(now)
         .expiration(expiryDate)
@@ -68,8 +68,14 @@ public class JwtUtil {
     return refreshExpiration;
   }
 
-  public String extractUsername(String token) {
-    return getClaims(token).getSubject();
+  public Long extractUserId(String token) {
+    try {
+      return Long.valueOf(getClaims(token).getSubject());
+    } catch (NumberFormatException e) {
+      // Reject tokens whose subject is not a numeric user ID (e.g. legacy tokens issued
+      // with an email subject) instead of letting the exception escape as a 500.
+      return null;
+    }
   }
 
   public boolean validateAccessToken(String token) {
@@ -84,7 +90,7 @@ public class JwtUtil {
     }
   }
 
-  public String validateAccessTokenAndGetUsername(String token) {
+  public Long validateAccessTokenAndGetUserId(String token) {
     try {
       Claims claims = getClaims(token);
       if (!ACCESS_TOKEN_TYPE.equals(claims.get(TOKEN_TYPE_CLAIM, String.class))) {
@@ -93,7 +99,7 @@ public class JwtUtil {
       if (claims.getExpiration().before(new Date())) {
         return null;
       }
-      return claims.getSubject();
+      return Long.valueOf(claims.getSubject());
     } catch (Exception e) {
       return null;
     }

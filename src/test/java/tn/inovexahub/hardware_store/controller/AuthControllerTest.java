@@ -3,7 +3,7 @@ package tn.inovexahub.hardware_store.controller;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -15,16 +15,18 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
+import tn.inovexahub.hardware_store.dto.ChangeRoleRequest;
 import tn.inovexahub.hardware_store.dto.ForgotPasswordRequest;
 import tn.inovexahub.hardware_store.dto.LoginRequest;
 import tn.inovexahub.hardware_store.dto.LoginResponse;
@@ -38,6 +40,7 @@ import tn.inovexahub.hardware_store.repository.PasswordResetTokenRepository;
 import tn.inovexahub.hardware_store.repository.UserRepository;
 import tn.inovexahub.hardware_store.security.JwtUtil;
 import tn.inovexahub.hardware_store.security.LoginRateLimiter;
+import tn.inovexahub.hardware_store.service.AccessTokenService;
 import tn.inovexahub.hardware_store.service.PasswordResetService;
 import tn.inovexahub.hardware_store.service.RefreshTokenService;
 
@@ -46,9 +49,9 @@ class AuthControllerTest {
 
   @Mock private AuthenticationManager authenticationManager;
   @Mock private JwtUtil jwtUtil;
+  @Mock private AccessTokenService accessTokenService;
   @Mock private RefreshTokenService refreshTokenService;
   @Mock private UserRepository userRepository;
-  @Mock private org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
   @Mock private PasswordEncoder passwordEncoder;
   @Mock private LoginRateLimiter loginRateLimiter;
   @Mock private PasswordResetService passwordResetService;
@@ -63,9 +66,9 @@ class AuthControllerTest {
         new AuthController(
             authenticationManager,
             jwtUtil,
+            accessTokenService,
             refreshTokenService,
             userRepository,
-            userDetailsService,
             passwordEncoder,
             loginRateLimiter,
             passwordResetService,
@@ -77,13 +80,20 @@ class AuthControllerTest {
     when(httpRequest.getRemoteAddr()).thenReturn("127.0.0.1");
   }
 
+  private org.springframework.security.core.Authentication mockAuthentication(String username) {
+    org.springframework.security.core.Authentication auth =
+        org.mockito.Mockito.mock(org.springframework.security.core.Authentication.class);
+    when(auth.getName()).thenReturn(username);
+    return auth;
+  }
+
   private User createUser(String email) {
     User user = new User();
     user.setId(1L);
-    user.setUsername("testuser");
+    user.setFirstName("Test");
+    user.setLastName("User");
     user.setEmail(email);
     user.setPassword("encodedPassword");
-    user.setFullName("Test User");
     user.setRole(UserRole.EMPLOYEE);
     user.setEnabled(true);
     return user;
@@ -94,19 +104,19 @@ class AuthControllerTest {
     when(loginRateLimiter.isBlocked("login:127.0.0.1")).thenReturn(false);
 
     Authentication auth = org.mockito.Mockito.mock(Authentication.class);
-    when(auth.getName()).thenReturn("testuser");
+    when(auth.getName()).thenReturn("test@example.com");
     when(authenticationManager.authenticate(any())).thenReturn(auth);
 
-    when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(user));
-    when(jwtUtil.generateAccessToken("testuser")).thenReturn("access-token");
-    when(refreshTokenService.generateRefreshToken("testuser")).thenReturn("refresh-token");
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+    when(accessTokenService.generateAccessToken(1L)).thenReturn("access-token");
+    when(refreshTokenService.generateRefreshToken(1L)).thenReturn("refresh-token");
     when(jwtUtil.getAccessExpirationMs()).thenReturn(3600000L);
     when(jwtUtil.getRefreshExpirationMs()).thenReturn(604800000L);
   }
 
   private LoginRequest buildLoginRequest() {
     LoginRequest req = new LoginRequest();
-    req.setUsername("testuser");
+    req.setEmail("test@example.com");
     req.setPassword("password");
     return req;
   }
@@ -126,11 +136,31 @@ class AuthControllerTest {
     assertEquals("access-token", body.getAccessToken());
     assertEquals("refresh-token", body.getRefreshToken());
     assertEquals("Bearer", body.getTokenType());
-    assertEquals("testuser", body.getUsername());
+    assertEquals("test@example.com", body.getEmail());
+    assertEquals("Test", body.getFirstName());
+    assertEquals("User", body.getLastName());
     assertEquals("EMPLOYEE", body.getRole());
     assertEquals(3600L, body.getAccessTokenExpiresIn());
     assertEquals(604800L, body.getRefreshTokenExpiresIn());
     verify(loginRateLimiter).reset("login:127.0.0.1");
+  }
+
+  @Test
+  void login_NormalizesEmailBeforeAuthentication() {
+    User user = createUser("test@example.com");
+    stubLoginSuccess(user);
+
+    LoginRequest req = new LoginRequest();
+    req.setEmail("  TEST@EXAMPLE.COM  ");
+    req.setPassword("password");
+
+    ResponseEntity<LoginResponse> response = authController.login(req, httpRequest);
+
+    ArgumentCaptor<UsernamePasswordAuthenticationToken> captor =
+        ArgumentCaptor.forClass(UsernamePasswordAuthenticationToken.class);
+    verify(authenticationManager).authenticate(captor.capture());
+    assertEquals("test@example.com", captor.getValue().getPrincipal());
+    assertEquals("test@example.com", response.getBody().getEmail());
   }
 
   @Test
@@ -169,9 +199,9 @@ class AuthControllerTest {
     when(loginRateLimiter.isBlocked("login:127.0.0.1")).thenReturn(false);
 
     Authentication auth = org.mockito.Mockito.mock(Authentication.class);
-    when(auth.getName()).thenReturn("testuser");
+    when(auth.getName()).thenReturn("test@example.com");
     when(authenticationManager.authenticate(any())).thenReturn(auth);
-    when(userRepository.findByUsername("testuser")).thenReturn(Optional.empty());
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.empty());
 
     ResponseStatusException ex =
         org.junit.jupiter.api.Assertions.assertThrows(
@@ -189,17 +219,10 @@ class AuthControllerTest {
     RefreshTokenRequest refreshReq = new RefreshTokenRequest();
     refreshReq.setRefreshToken("old-refresh-token");
 
-    when(refreshTokenService.extractUsername("old-refresh-token")).thenReturn("testuser");
-    UserDetails userDetails =
-        org.springframework.security.core.userdetails.User.withUsername("testuser")
-            .password("pass")
-            .authorities("ROLE_EMPLOYEE")
-            .build();
-    when(userDetailsService.loadUserByUsername("testuser")).thenReturn(userDetails);
-    when(userRepository.findByUsername("testuser"))
-        .thenReturn(Optional.of(createUser("test@example.com")));
-    when(jwtUtil.generateAccessToken("testuser")).thenReturn("new-access");
-    when(refreshTokenService.rotate("old-refresh-token", "testuser")).thenReturn("new-refresh");
+    when(refreshTokenService.extractUserId("old-refresh-token")).thenReturn(1L);
+    when(userRepository.findById(1L)).thenReturn(Optional.of(createUser("test@example.com")));
+    when(accessTokenService.generateAccessToken(1L)).thenReturn("new-access");
+    when(refreshTokenService.rotate("old-refresh-token", 1L)).thenReturn("new-refresh");
     when(jwtUtil.getAccessExpirationMs()).thenReturn(3600000L);
     when(jwtUtil.getRefreshExpirationMs()).thenReturn(604800000L);
 
@@ -211,7 +234,7 @@ class AuthControllerTest {
     assertEquals("new-access", body.getAccessToken());
     assertEquals("new-refresh", body.getRefreshToken());
     assertEquals("Bearer", body.getTokenType());
-    assertEquals("testuser", body.getUsername());
+    assertEquals("test@example.com", body.getEmail());
     assertEquals("EMPLOYEE", body.getRole());
   }
 
@@ -220,17 +243,11 @@ class AuthControllerTest {
     RefreshTokenRequest refreshReq = new RefreshTokenRequest();
     refreshReq.setRefreshToken("old-refresh-token");
 
-    when(refreshTokenService.extractUsername("old-refresh-token")).thenReturn("testuser");
-    UserDetails userDetails =
-        org.springframework.security.core.userdetails.User.withUsername("testuser")
-            .password("pass")
-            .authorities("ROLE_EMPLOYEE")
-            .build();
-    when(userDetailsService.loadUserByUsername("testuser")).thenReturn(userDetails);
+    when(refreshTokenService.extractUserId("old-refresh-token")).thenReturn(1L);
 
     User disabledUser = createUser("test@example.com");
     disabledUser.setEnabled(false);
-    when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(disabledUser));
+    when(userRepository.findById(1L)).thenReturn(Optional.of(disabledUser));
 
     ResponseStatusException ex =
         org.junit.jupiter.api.Assertions.assertThrows(
@@ -245,14 +262,8 @@ class AuthControllerTest {
     RefreshTokenRequest refreshReq = new RefreshTokenRequest();
     refreshReq.setRefreshToken("old-refresh-token");
 
-    when(refreshTokenService.extractUsername("old-refresh-token")).thenReturn("testuser");
-    UserDetails userDetails =
-        org.springframework.security.core.userdetails.User.withUsername("testuser")
-            .password("pass")
-            .authorities("ROLE_EMPLOYEE")
-            .build();
-    when(userDetailsService.loadUserByUsername("testuser")).thenReturn(userDetails);
-    when(userRepository.findByUsername("testuser")).thenReturn(Optional.empty());
+    when(refreshTokenService.extractUserId("old-refresh-token")).thenReturn(999L);
+    when(userRepository.findById(999L)).thenReturn(Optional.empty());
 
     ResponseStatusException ex =
         org.junit.jupiter.api.Assertions.assertThrows(
@@ -270,7 +281,8 @@ class AuthControllerTest {
     ResponseEntity<Void> response = authController.deleteUser(1L);
 
     assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-    verify(refreshTokenService).revokeAllForUser("testuser");
+    verify(refreshTokenService).revokeAllForUser(1L);
+    verify(accessTokenService).revokeAllForUser(1L);
     verify(userRepository).delete(any(User.class));
   }
 
@@ -283,79 +295,94 @@ class AuthControllerTest {
             ResponseStatusException.class, () -> authController.deleteUser(999L));
 
     assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
-    verify(refreshTokenService, never()).revokeAllForUser(anyString());
+    verify(refreshTokenService, never()).revokeAllForUser(anyLong());
+    verify(accessTokenService, never()).revokeAllForUser(anyLong());
     verify(userRepository, never()).delete(any(User.class));
   }
 
-  // --- updateUser ---
+  // --- updateMe ---
 
   @Test
-  void updateUser_WithFullName_ReturnsOk() {
+  void updateMe_WithFirstNameAndLastName_ReturnsOk() {
     User existing = createUser("test@example.com");
-    when(userRepository.findById(1L)).thenReturn(Optional.of(existing));
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(existing));
     when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
     UpdateUserRequest request = new UpdateUserRequest();
-    request.setFullName("Updated Name");
+    request.setFirstName("Updated");
+    request.setLastName("Name");
 
-    ResponseEntity<User> response = authController.updateUser(1L, request);
+    ResponseEntity<User> response =
+        authController.updateMe(request, mockAuthentication("test@example.com"));
 
     assertEquals(HttpStatus.OK, response.getStatusCode());
-    assertEquals("Updated Name", existing.getFullName());
+    assertEquals("Updated", existing.getFirstName());
+    assertEquals("Name", existing.getLastName());
     verify(userRepository).save(existing);
   }
 
   @Test
-  void updateUser_WithRole_ReturnsOk() {
-    User existing = createUser("test@example.com");
-    when(userRepository.findById(1L)).thenReturn(Optional.of(existing));
-    when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
-
-    UpdateUserRequest req = new UpdateUserRequest();
-    req.setRole("ADMIN");
-
-    ResponseEntity<User> response = authController.updateUser(1L, req);
-
-    assertEquals(HttpStatus.OK, response.getStatusCode());
-    assertEquals(UserRole.ADMIN, existing.getRole());
-    verify(userRepository).save(existing);
-  }
-
-  @Test
-  void updateUser_WithNewEmail_RevokesPasswordResetTokens() {
+  void updateMe_WithNewEmail_RevokesPasswordResetAndRefreshTokens() {
     User existing = createUser("old@example.com");
-    when(userRepository.findById(1L)).thenReturn(Optional.of(existing));
+    when(userRepository.findByEmail("old@example.com")).thenReturn(Optional.of(existing));
     when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
     when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
     UpdateUserRequest request = new UpdateUserRequest();
     request.setEmail("new@example.com");
 
-    ResponseEntity<User> response = authController.updateUser(1L, request);
+    ResponseEntity<User> response =
+        authController.updateMe(request, mockAuthentication("old@example.com"));
 
     assertEquals(HttpStatus.OK, response.getStatusCode());
     assertEquals("new@example.com", existing.getEmail());
     verify(passwordResetTokenRepository).revokeAllForUserId(1L);
+    verify(refreshTokenService).revokeAllForUser(1L);
+    verify(accessTokenService).revokeAllForUser(1L);
   }
 
   @Test
-  void updateUser_SameEmail_ReturnsOk() {
+  void updateMe_NewEmail_NormalizesBeforeConflictCheckAndSave() {
+    User existing = createUser("old@example.com");
+    when(userRepository.findByEmail("old@example.com")).thenReturn(Optional.of(existing));
+    when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
+    when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    UpdateUserRequest request = new UpdateUserRequest();
+    request.setEmail("  NEW@EXAMPLE.COM  ");
+
+    ResponseEntity<User> response =
+        authController.updateMe(request, mockAuthentication("old@example.com"));
+
+    assertEquals(HttpStatus.OK, response.getStatusCode());
+    assertEquals("new@example.com", existing.getEmail());
+    verify(userRepository).existsByEmail("new@example.com");
+    verify(refreshTokenService).revokeAllForUser(1L);
+    verify(accessTokenService).revokeAllForUser(1L);
+  }
+
+  @Test
+  void updateMe_SameEmail_ReturnsOk() {
     User existing = createUser("same@example.com");
-    when(userRepository.findById(1L)).thenReturn(Optional.of(existing));
+    when(userRepository.findByEmail("same@example.com")).thenReturn(Optional.of(existing));
     when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
     UpdateUserRequest request = new UpdateUserRequest();
     request.setEmail("same@example.com");
 
-    ResponseEntity<User> response = authController.updateUser(1L, request);
+    ResponseEntity<User> response =
+        authController.updateMe(request, mockAuthentication("same@example.com"));
 
     assertEquals(HttpStatus.OK, response.getStatusCode());
+    verify(passwordResetTokenRepository, never()).revokeAllForUserId(1L);
+    verify(refreshTokenService, never()).revokeAllForUser(anyLong());
+    verify(accessTokenService, never()).revokeAllForUser(anyLong());
   }
 
   @Test
-  void updateUser_DuplicateEmail_ReturnsConflict() {
+  void updateMe_DuplicateEmail_ReturnsConflict() {
     User existing = createUser("old@example.com");
-    when(userRepository.findById(1L)).thenReturn(Optional.of(existing));
+    when(userRepository.findByEmail("old@example.com")).thenReturn(Optional.of(existing));
     when(userRepository.existsByEmail("taken@example.com")).thenReturn(true);
 
     UpdateUserRequest request = new UpdateUserRequest();
@@ -363,21 +390,113 @@ class AuthControllerTest {
 
     ResponseStatusException ex =
         org.junit.jupiter.api.Assertions.assertThrows(
-            ResponseStatusException.class, () -> authController.updateUser(1L, request));
+            ResponseStatusException.class,
+            () -> authController.updateMe(request, mockAuthentication("old@example.com")));
 
     assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
+    verify(userRepository, never()).save(any(User.class));
   }
 
   @Test
-  void updateUser_NonExistingUser_ReturnsNotFound() {
-    when(userRepository.findById(999L)).thenReturn(Optional.empty());
+  void updateMe_UserNotFound_ReturnsNotFound() {
+    when(userRepository.findByEmail("ghost@example.com")).thenReturn(Optional.empty());
 
     UpdateUserRequest request = new UpdateUserRequest();
-    request.setFullName("Updated");
+    request.setFirstName("Updated");
 
     ResponseStatusException ex =
         org.junit.jupiter.api.Assertions.assertThrows(
-            ResponseStatusException.class, () -> authController.updateUser(999L, request));
+            ResponseStatusException.class,
+            () -> authController.updateMe(request, mockAuthentication("ghost@example.com")));
+
+    assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
+  }
+
+  // --- changeUserRole ---
+
+  @Test
+  void changeUserRole_AdminChangesOtherUser_ReturnsOk() {
+    User existing = createUser("test@example.com");
+    when(userRepository.findById(1L)).thenReturn(Optional.of(existing));
+    when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    ChangeRoleRequest req = new ChangeRoleRequest();
+    req.setRole("ADMIN");
+
+    ResponseEntity<User> response =
+        authController.changeUserRole(1L, req, mockAuthentication("admin@example.com"));
+
+    assertEquals(HttpStatus.OK, response.getStatusCode());
+    assertEquals(UserRole.ADMIN, existing.getRole());
+    verify(userRepository).save(existing);
+  }
+
+  @Test
+  void changeUserRole_AdminDemotesOtherUserToEmployee_ReturnsOk() {
+    User existing = createUser("test@example.com");
+    existing.setRole(UserRole.ADMIN);
+    when(userRepository.findById(1L)).thenReturn(Optional.of(existing));
+    when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    ChangeRoleRequest req = new ChangeRoleRequest();
+    req.setRole("EMPLOYEE");
+
+    ResponseEntity<User> response =
+        authController.changeUserRole(1L, req, mockAuthentication("admin@example.com"));
+
+    assertEquals(HttpStatus.OK, response.getStatusCode());
+    assertEquals(UserRole.EMPLOYEE, existing.getRole());
+    verify(userRepository).save(existing);
+  }
+
+  @Test
+  void changeUserRole_SelfRoleChange_ReturnsForbidden() {
+    User existing = createUser("test@example.com");
+    when(userRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+    ChangeRoleRequest req = new ChangeRoleRequest();
+    req.setRole("ADMIN");
+
+    ResponseStatusException ex =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            ResponseStatusException.class,
+            () -> authController.changeUserRole(1L, req, mockAuthentication("test@example.com")));
+
+    assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    verify(userRepository, never()).save(any(User.class));
+  }
+
+  @Test
+  void changeUserRole_InvalidRole_ThrowsIllegalArgumentException() {
+    User existing = createUser("test@example.com");
+    when(userRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+    ChangeRoleRequest req = new ChangeRoleRequest();
+    req.setRole("SUPERUSER");
+
+    org.junit.jupiter.api.Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> authController.changeUserRole(1L, req, mockAuthentication("admin@example.com")));
+
+    verify(userRepository, never()).save(any(User.class));
+  }
+
+  @Test
+  void changeUserRole_NonExistingUser_ReturnsNotFound() {
+    when(userRepository.findById(999L)).thenReturn(Optional.empty());
+
+    ChangeRoleRequest req = new ChangeRoleRequest();
+    req.setRole("ADMIN");
+
+    ResponseStatusException ex =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            ResponseStatusException.class,
+            () ->
+                authController.changeUserRole(
+                    999L,
+                    req,
+                    org.mockito.Mockito.mock(
+                        org.springframework.security.core.Authentication.class)));
 
     assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
   }
@@ -485,7 +604,8 @@ class AuthControllerTest {
 
     assertEquals(HttpStatus.OK, response.getStatusCode());
     verify(passwordResetService).resetPassword("user@example.com", "123456", "newSecurePass123");
-    verify(refreshTokenService).revokeAllForUser("testuser");
+    verify(refreshTokenService).revokeAllForUser(1L);
+    verify(accessTokenService).revokeAllForUser(1L);
   }
 
   @Test
@@ -555,12 +675,11 @@ class AuthControllerTest {
   @Test
   void register_NewUser_ReturnsOk() {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername("newuser");
+    request.setFirstName("New");
+    request.setLastName("User");
     request.setEmail("new@example.com");
     request.setPassword("password123");
-    request.setFullName("New User");
 
-    when(userRepository.existsByUsername("newuser")).thenReturn(false);
     when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
     when(passwordEncoder.encode("password123")).thenReturn("encoded_password");
 
@@ -574,32 +693,13 @@ class AuthControllerTest {
   }
 
   @Test
-  void register_DuplicateUsername_ReturnsConflict() {
-    RegisterRequest request = new RegisterRequest();
-    request.setUsername("existing");
-    request.setEmail("new@example.com");
-    request.setPassword("password123");
-    request.setFullName("New User");
-
-    when(userRepository.existsByUsername("existing")).thenReturn(true);
-
-    ResponseStatusException ex =
-        org.junit.jupiter.api.Assertions.assertThrows(
-            ResponseStatusException.class, () -> authController.register(request));
-
-    assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
-    verify(userRepository, never()).save(any());
-  }
-
-  @Test
   void register_DuplicateEmail_ReturnsConflict() {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername("newuser");
+    request.setFirstName("New");
+    request.setLastName("User");
     request.setEmail("existing@example.com");
     request.setPassword("password123");
-    request.setFullName("New User");
 
-    when(userRepository.existsByUsername("newuser")).thenReturn(false);
     when(userRepository.existsByEmail("existing@example.com")).thenReturn(true);
 
     ResponseStatusException ex =

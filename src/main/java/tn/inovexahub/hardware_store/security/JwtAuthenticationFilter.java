@@ -10,11 +10,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import tn.inovexahub.hardware_store.service.AccessTokenService;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -22,11 +22,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
   private final JwtUtil jwtUtil;
-  private final UserDetailsService userDetailsService;
+  private final UserDetailsServiceImpl userDetailsService;
+  private final AccessTokenService accessTokenService;
 
-  public JwtAuthenticationFilter(JwtUtil jwtUtil, UserDetailsService userDetailsService) {
+  public JwtAuthenticationFilter(
+      JwtUtil jwtUtil,
+      UserDetailsServiceImpl userDetailsService,
+      AccessTokenService accessTokenService) {
     this.jwtUtil = jwtUtil;
     this.userDetailsService = userDetailsService;
+    this.accessTokenService = accessTokenService;
   }
 
   @Override
@@ -43,15 +48,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     String token = authHeader.substring(7);
 
-    String username = jwtUtil.validateAccessTokenAndGetUsername(token);
-    if (username != null) {
+    Long userId = jwtUtil.validateAccessTokenAndGetUserId(token);
+    if (userId != null) {
       try {
-        UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+        UserDetails userDetails = userDetailsService.loadUserById(userId);
 
         // Re-check the account is still enabled on every request: disabling a user must take
         // effect immediately, not only once their (already-issued) access token naturally
-        // expires.
-        if (userDetails.isEnabled()) {
+        // expires. Also reject access tokens whose server-side record has been revoked (e.g.
+        // after an email change) or that were never issued by this service.
+        if (userDetails.isEnabled() && accessTokenService.isActive(token, userId)) {
           UsernamePasswordAuthenticationToken authToken =
               new UsernamePasswordAuthenticationToken(
                   userDetails, null, userDetails.getAuthorities());
@@ -61,7 +67,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
       } catch (UsernameNotFoundException e) {
         // The account behind this token no longer exists (e.g. deleted). Leave the request
         // unauthenticated rather than propagating an exception up the filter chain.
-        log.debug("Rejected access token for unknown user '{}'", username);
+        log.debug("Rejected access token for unknown user id '{}'", userId);
       }
     }
 

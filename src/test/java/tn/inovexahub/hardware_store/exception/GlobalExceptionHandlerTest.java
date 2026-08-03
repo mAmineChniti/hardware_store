@@ -164,7 +164,7 @@ class GlobalExceptionHandlerTest {
     assertNotNull(response.getBody());
     assertEquals(401, response.getBody().getStatus());
     assertEquals("Authentication Failed", response.getBody().getError());
-    assertEquals("Invalid username or password", response.getBody().getMessage());
+    assertEquals("Invalid email or password", response.getBody().getMessage());
   }
 
   @Test

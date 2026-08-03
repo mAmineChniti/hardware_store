@@ -10,7 +10,7 @@ spring:
     defer-datasource-initialization: true
     hibernate:
       ddl-auto: create-drop
-    show-sql: true
+    show-sql: false
     open-in-view: false
     properties:
       hibernate:
@@ -32,8 +32,8 @@ spring:
 logging:
   level:
     org.springframework.boot: INFO
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.hibernate.SQL: OFF
+    org.hibernate.tool.hbm2ddl: OFF
     tn.inovexahub.hardware_store: DEBUG
 
 server:

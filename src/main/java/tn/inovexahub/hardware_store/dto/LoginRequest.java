@@ -13,11 +13,11 @@ import lombok.NoArgsConstructor;
 public class LoginRequest {
 
   @Schema(
-      description = "User's username",
-      example = "john_doe",
+      description = "User's email address",
+      example = "john.doe@example.com",
       requiredMode = Schema.RequiredMode.REQUIRED)
-  @NotBlank(message = "Username is required")
-  private String username;
+  @NotBlank(message = "Email is required")
+  private String email;
 
   @Schema(
       description = "User's password",

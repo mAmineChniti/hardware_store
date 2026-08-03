@@ -283,7 +283,8 @@ http://localhost:8080/swagger-ui.html
 - `POST /api/auth/register` - Inscription utilisateur (crée compte EMPLOYEE par défaut)
 - `POST /api/auth/forgot-password` - Demander un code OTP de réinitialisation (envoyé par email)
 - `POST /api/auth/reset-password` - Réinitialiser le mot de passe avec le code OTP
-- `PUT /api/auth/users/{id}` - Mise à jour utilisateur (requiert authentification)
+- `PUT /api/auth/me` - Mettre à jour son propre profil (prénom, nom, email ; utilisateur connecté)
+- `PUT /api/auth/users/{id}/role` - Changer le rôle d'un autre utilisateur (EMPLOYEE ou ADMIN ; ADMIN uniquement)
 - `DELETE /api/auth/users/{id}` - Suppression utilisateur (requiert authentification)
 
 #### Clients (`/api/clients`)

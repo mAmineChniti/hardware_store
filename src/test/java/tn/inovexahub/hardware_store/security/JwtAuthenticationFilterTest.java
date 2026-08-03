@@ -20,21 +20,22 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import tn.inovexahub.hardware_store.service.AccessTokenService;
 
 @ExtendWith(MockitoExtension.class)
 class JwtAuthenticationFilterTest {
 
   @Mock private JwtUtil jwtUtil;
-  @Mock private UserDetailsService userDetailsService;
+  @Mock private UserDetailsServiceImpl userDetailsService;
+  @Mock private AccessTokenService accessTokenService;
   @Mock private FilterChain filterChain;
 
   private JwtAuthenticationFilter filter;
 
   @BeforeEach
   void setUp() {
-    filter = new JwtAuthenticationFilter(jwtUtil, userDetailsService);
+    filter = new JwtAuthenticationFilter(jwtUtil, userDetailsService, accessTokenService);
     SecurityContextHolder.clearContext();
   }
 
@@ -71,7 +72,7 @@ class JwtAuthenticationFilterTest {
     MockHttpServletRequest request = new MockHttpServletRequest();
     request.addHeader("Authorization", "Bearer invalid.token.here");
     MockHttpServletResponse response = new MockHttpServletResponse();
-    when(jwtUtil.validateAccessTokenAndGetUsername("invalid.token.here")).thenReturn(null);
+    when(jwtUtil.validateAccessTokenAndGetUserId("invalid.token.here")).thenReturn(null);
 
     filter.doFilter(request, response, filterChain);
 
@@ -86,9 +87,10 @@ class JwtAuthenticationFilterTest {
     MockHttpServletResponse response = new MockHttpServletResponse();
 
     UserDetails userDetails =
-        new User("testuser", "password", true, true, true, true, Collections.emptyList());
-    when(jwtUtil.validateAccessTokenAndGetUsername("valid.token")).thenReturn("testuser");
-    when(userDetailsService.loadUserByUsername("testuser")).thenReturn(userDetails);
+        new User("test@example.com", "password", true, true, true, true, Collections.emptyList());
+    when(jwtUtil.validateAccessTokenAndGetUserId("valid.token")).thenReturn(1L);
+    when(userDetailsService.loadUserById(1L)).thenReturn(userDetails);
+    when(accessTokenService.isActive("valid.token", 1L)).thenReturn(true);
 
     filter.doFilter(request, response, filterChain);
 
@@ -99,15 +101,33 @@ class JwtAuthenticationFilterTest {
   }
 
   @Test
+  void doFilter_ValidTokenRevokedAccessToken_DoesNotAuthenticate() throws Exception {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.addHeader("Authorization", "Bearer valid.token");
+    MockHttpServletResponse response = new MockHttpServletResponse();
+
+    UserDetails userDetails =
+        new User("test@example.com", "password", true, true, true, true, Collections.emptyList());
+    when(jwtUtil.validateAccessTokenAndGetUserId("valid.token")).thenReturn(1L);
+    when(userDetailsService.loadUserById(1L)).thenReturn(userDetails);
+    when(accessTokenService.isActive("valid.token", 1L)).thenReturn(false);
+
+    filter.doFilter(request, response, filterChain);
+
+    assertNull(SecurityContextHolder.getContext().getAuthentication());
+    verify(filterChain).doFilter(request, response);
+  }
+
+  @Test
   void doFilter_ValidTokenDisabledUser_DoesNotAuthenticate() throws Exception {
     MockHttpServletRequest request = new MockHttpServletRequest();
     request.addHeader("Authorization", "Bearer valid.token");
     MockHttpServletResponse response = new MockHttpServletResponse();
 
     UserDetails userDetails =
-        new User("testuser", "password", false, true, true, true, Collections.emptyList());
-    when(jwtUtil.validateAccessTokenAndGetUsername("valid.token")).thenReturn("testuser");
-    when(userDetailsService.loadUserByUsername("testuser")).thenReturn(userDetails);
+        new User("test@example.com", "password", false, true, true, true, Collections.emptyList());
+    when(jwtUtil.validateAccessTokenAndGetUserId("valid.token")).thenReturn(1L);
+    when(userDetailsService.loadUserById(1L)).thenReturn(userDetails);
 
     filter.doFilter(request, response, filterChain);
 
@@ -121,9 +141,9 @@ class JwtAuthenticationFilterTest {
     request.addHeader("Authorization", "Bearer valid.token");
     MockHttpServletResponse response = new MockHttpServletResponse();
 
-    when(jwtUtil.validateAccessTokenAndGetUsername("valid.token")).thenReturn("ghost");
-    when(userDetailsService.loadUserByUsername("ghost"))
-        .thenThrow(new UsernameNotFoundException("User not found: ghost"));
+    when(jwtUtil.validateAccessTokenAndGetUserId("valid.token")).thenReturn(999L);
+    when(userDetailsService.loadUserById(999L))
+        .thenThrow(new UsernameNotFoundException("User not found: 999"));
 
     filter.doFilter(request, response, filterChain);
 

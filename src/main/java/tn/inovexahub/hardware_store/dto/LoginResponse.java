@@ -32,8 +32,14 @@ public class LoginResponse {
   @Schema(description = "Token type (always Bearer)", example = "Bearer")
   private String tokenType = "Bearer";
 
-  @Schema(description = "Authenticated user's username", example = "john_doe")
-  private String username;
+  @Schema(description = "Authenticated user's email", example = "john.doe@example.com")
+  private String email;
+
+  @Schema(description = "Authenticated user's first name", example = "John")
+  private String firstName;
+
+  @Schema(description = "Authenticated user's last name", example = "Doe")
+  private String lastName;
 
   @Schema(description = "Authenticated user's role", example = "EMPLOYEE")
   private String role;
