@@ -16,6 +16,11 @@ import lombok.NoArgsConstructor;
 /**
  * AuditLog entity for generic audit of critical actions. Section 10: AuditLog entity (optional but
  * recommended)
+ *
+ * <p>{@code userId} is an optional identity snapshot: a nullable scalar with no JPA association to
+ * {@link User} (and no DB foreign key). {@code email} mirrors the user's email at action time.
+ * Audit rows deliberately remain valid if the acting user is later deleted, and system-triggered
+ * actions may have no user at all.
  */
 @Entity
 @Table(name = "audit_logs")
@@ -33,9 +38,15 @@ public class AuditLog {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Schema(description = "Username who performed the action", example = "john_doe")
-  @Column(name = "username", length = 50)
-  private String username;
+  @Schema(description = "ID of the user who performed the action", example = "1")
+  @Column(name = "user_id")
+  private Long userId;
+
+  @Schema(
+      description = "Email of the user who performed the action",
+      example = "john.doe@example.com")
+  @Column(name = "email", length = 100)
+  private String email;
 
   @Schema(description = "Action performed", example = "DELETE_CLIENT")
   @Column(name = "action", nullable = false, length = 100)

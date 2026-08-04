@@ -10,7 +10,7 @@ import tn.inovexahub.hardware_store.entity.AuditLog;
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
 
-  List<AuditLog> findByUsername(String username);
+  List<AuditLog> findByEmail(String email);
 
   List<AuditLog> findByEntityType(String entityType);
 

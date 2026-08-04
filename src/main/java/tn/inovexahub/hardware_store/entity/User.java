@@ -33,9 +33,13 @@ public class User {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Schema(description = "Unique username", example = "john_doe")
-  @Column(name = "username", unique = true, nullable = false, length = 50)
-  private String username;
+  @Schema(description = "User's first name", example = "John")
+  @Column(name = "first_name", nullable = false, length = 50)
+  private String firstName;
+
+  @Schema(description = "User's last name", example = "Doe")
+  @Column(name = "last_name", nullable = false, length = 50)
+  private String lastName;
 
   @Schema(description = "User's email address", example = "john.doe@example.com")
   @Column(name = "email", unique = true, nullable = false, length = 100)
@@ -45,10 +49,6 @@ public class User {
   @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
   @Column(name = "password", nullable = false)
   private String password; // BCrypt hashed
-
-  @Schema(description = "User's full name", example = "John Doe")
-  @Column(name = "full_name", nullable = false, length = 100)
-  private String fullName;
 
   @Schema(description = "User's role (EMPLOYEE or ADMIN)", example = "EMPLOYEE")
   @Enumerated(EnumType.STRING)

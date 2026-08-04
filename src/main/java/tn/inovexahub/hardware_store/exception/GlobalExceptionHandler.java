@@ -165,7 +165,7 @@ public class GlobalExceptionHandler {
     log.error("Authentication failed: {}", ex.getMessage());
     String message = "Authentication failed";
     if (ex instanceof BadCredentialsException) {
-      message = "Invalid username or password";
+      message = "Invalid email or password";
     }
     ErrorResponse error =
         new ErrorResponse(

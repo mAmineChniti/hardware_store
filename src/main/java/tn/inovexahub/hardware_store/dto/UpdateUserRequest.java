@@ -13,15 +13,16 @@ import lombok.NoArgsConstructor;
 @Schema(description = "Request payload for updating an existing user's information")
 public class UpdateUserRequest {
 
-  @Schema(description = "Updated full name (max 100 characters)", example = "Jane Doe")
-  @Size(max = 100, message = "Full name must not exceed 100 characters")
-  private String fullName;
+  @Schema(description = "Updated first name (max 50 characters)", example = "Jane")
+  @Size(max = 50, message = "First name must not exceed 50 characters")
+  private String firstName;
+
+  @Schema(description = "Updated last name (max 50 characters)", example = "Doe")
+  @Size(max = 50, message = "Last name must not exceed 50 characters")
+  private String lastName;
 
   @Schema(description = "Updated email address", example = "jane.doe@example.com")
   @Email(message = "Must be a valid email address")
   @Size(max = 100, message = "Email must not exceed 100 characters")
   private String email;
-
-  @Schema(description = "Updated user role (EMPLOYEE or ADMIN)", example = "ADMIN")
-  private String role;
 }

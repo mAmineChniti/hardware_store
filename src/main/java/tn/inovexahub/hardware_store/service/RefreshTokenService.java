@@ -1,12 +1,7 @@
 package tn.inovexahub.hardware_store.service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
-import java.util.HexFormat;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -27,11 +22,11 @@ public class RefreshTokenService {
 
   /** Issues a new refresh token for the given user and persists a record of it. */
   @Transactional
-  public String generateRefreshToken(String username) {
-    String rawToken = jwtUtil.generateRefreshToken(username);
+  public String generateRefreshToken(Long userId) {
+    String rawToken = jwtUtil.generateRefreshToken(userId);
 
     RefreshToken entity = new RefreshToken();
-    entity.setUsername(username);
+    entity.setUserId(userId);
     entity.setTokenHash(hash(rawToken));
     entity.setExpiresAt(
         LocalDateTime.now().plusNanos(jwtUtil.getRefreshExpirationMs() * 1_000_000L));
@@ -41,19 +36,24 @@ public class RefreshTokenService {
     return rawToken;
   }
 
-  /** Validates the raw JWT itself (signature, type, expiry) and returns its subject username. */
-  public String extractUsername(String refreshToken) {
+  /** Validates the raw JWT itself (signature, type, expiry) and returns its subject user ID. */
+  public Long extractUserId(String refreshToken) {
     if (!jwtUtil.validateRefreshToken(refreshToken)) {
       throw new ResponseStatusException(
           HttpStatus.UNAUTHORIZED, "Invalid or expired refresh token");
     }
-
-    return jwtUtil.extractUsername(refreshToken);
+    Long userId = jwtUtil.extractUserId(refreshToken);
+    if (userId == null) {
+      // E.g. a legacy token whose subject is an email rather than a numeric user ID.
+      throw new ResponseStatusException(
+          HttpStatus.UNAUTHORIZED, "Invalid or expired refresh token");
+    }
+    return userId;
   }
 
-  public void validateRefreshTokenForUser(String refreshToken, UserDetails userDetails) {
-    String username = extractUsername(refreshToken);
-    if (!userDetails.getUsername().equals(username)) {
+  public void validateRefreshTokenForUser(String refreshToken, Long userId) {
+    Long tokenUserId = extractUserId(refreshToken);
+    if (!tokenUserId.equals(userId)) {
       throw new ResponseStatusException(
           HttpStatus.UNAUTHORIZED, "Refresh token does not match user");
     }
@@ -63,16 +63,16 @@ public class RefreshTokenService {
    * Atomically rotates a refresh token: the presented token is revoked (so it can never be
    * presented again) and a brand new refresh token is issued and persisted for the same user, all
    * within a single transaction. Callers must have already validated the token belongs to {@code
-   * username} (e.g. via {@link #validateRefreshTokenForUser}).
+   * userId} (e.g. via {@link #validateRefreshTokenForUser}).
    *
    * @return the newly issued raw refresh token
    * @throws ResponseStatusException with 401 if the presented token was already used, revoked, or
    *     was never issued by this service
    */
   @Transactional
-  public String rotate(String presentedRefreshToken, String username) {
+  public String rotate(String presentedRefreshToken, Long userId) {
     revokeActiveToken(presentedRefreshToken);
-    return generateRefreshToken(username);
+    return generateRefreshToken(userId);
   }
 
   /**
@@ -83,14 +83,14 @@ public class RefreshTokenService {
    */
   @Transactional
   public void revoke(String presentedRefreshToken) {
-    extractUsername(presentedRefreshToken); // validates signature, type and expiry first
+    extractUserId(presentedRefreshToken); // validates signature, type and expiry first
     revokeActiveToken(presentedRefreshToken);
   }
 
   /** Revokes all currently active refresh tokens for a user, e.g. when the account is disabled. */
   @Transactional
-  public void revokeAllForUser(String username) {
-    refreshTokenRepository.revokeAllActiveForUser(username);
+  public void revokeAllForUser(Long userId) {
+    refreshTokenRepository.revokeAllActiveForUser(userId);
   }
 
   private void revokeActiveToken(String rawToken) {
@@ -102,12 +102,6 @@ public class RefreshTokenService {
   }
 
   private String hash(String rawToken) {
-    try {
-      MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      byte[] hashBytes = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));
-      return HexFormat.of().formatHex(hashBytes);
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException("SHA-256 algorithm not available", e);
-    }
+    return TokenHashUtil.sha256Hex(rawToken);
   }
 }
