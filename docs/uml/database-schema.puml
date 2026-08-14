@@ -16,10 +16,10 @@ skinparam entity {
 
 entity users {
   id BIGSERIAL PK
-  username VARCHAR(50) UNIQUE
-  email VARCHAR(100) UNIQUE
+  first_name VARCHAR(50)
+  last_name VARCHAR(50)
+  email VARCHAR(100) UNIQUE CHECK (email = LOWER(email))
   password VARCHAR
-  full_name VARCHAR(100)
   role VARCHAR(20)
   enabled BOOLEAN
   created_at TIMESTAMP
@@ -162,7 +162,8 @@ entity credit_history {
 
 entity audit_logs {
   id BIGSERIAL PK
-  username VARCHAR(50)
+  user_id BIGINT /* optional identity snapshot, no FK */
+  email VARCHAR(100)
   action VARCHAR(100)
   entity_type VARCHAR(50)
   entity_id BIGINT
@@ -170,10 +171,25 @@ entity audit_logs {
   timestamp TIMESTAMP
 }
 
+note right of audit_logs
+  user_id: OPTIONAL identity snapshot (nullable, no FK)
+  email: snapshot of the user's email at action time
+  Audit rows may lack a user or outlive a deleted user
+end note
+
 entity refresh_tokens {
   id BIGSERIAL PK
   token_hash VARCHAR(64) UNIQUE
-  username VARCHAR(50)
+  user_id BIGINT FK
+  expires_at TIMESTAMP
+  revoked BOOLEAN
+  created_at TIMESTAMP
+}
+
+entity access_tokens {
+  id BIGSERIAL PK
+  token_hash VARCHAR(64) UNIQUE
+  user_id BIGINT FK
   expires_at TIMESTAMP
   revoked BOOLEAN
   created_at TIMESTAMP
@@ -203,17 +219,18 @@ end note
 product_conditionings }o--|| products : "product_id"
 product_costs }o--|| products : "product_id"
 product_costs }o--o| suppliers : "supplier_id"
-documents }o--|| clients : "client_id"
-documents }o--|| users : "user_id"
+documents }o--o| clients : "client_id"
+documents }o--o| users : "user_id"
 document_lines }o--|| documents : "document_id"
 document_lines }o--o| products : "product_id"
 payment_receipts }o--|| clients : "client_id"
 payment_receipts }o--o| users : "user_id"
 credit_history }o--|| clients : "client_id"
 credit_history }o--o| documents : "document_id"
-credit_history }o--|| payment_receipts : "payment_receipt_id"
-refresh_tokens }o--|| users : "username"
-password_reset_tokens }o--|| users : "email"
+credit_history }o--o| payment_receipts : "payment_receipt_id"
+refresh_tokens }o--|| users : "user_id"
+access_tokens }o--|| users : "user_id"
+password_reset_tokens }o--|| users : "user_id"
 
 ' ============================================
 ' NOTES

@@ -11,13 +11,13 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.Locale;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import tn.inovexahub.hardware_store.dto.ChangeRoleRequest;
 import tn.inovexahub.hardware_store.dto.ForgotPasswordRequest;
 import tn.inovexahub.hardware_store.dto.LoginRequest;
 import tn.inovexahub.hardware_store.dto.LoginResponse;
@@ -39,8 +40,10 @@ import tn.inovexahub.hardware_store.repository.PasswordResetTokenRepository;
 import tn.inovexahub.hardware_store.repository.UserRepository;
 import tn.inovexahub.hardware_store.security.JwtUtil;
 import tn.inovexahub.hardware_store.security.LoginRateLimiter;
+import tn.inovexahub.hardware_store.service.AccessTokenService;
 import tn.inovexahub.hardware_store.service.PasswordResetService;
 import tn.inovexahub.hardware_store.service.RefreshTokenService;
+import tn.inovexahub.hardware_store.service.UserService;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -49,33 +52,36 @@ public class AuthController {
 
   private final AuthenticationManager authenticationManager;
   private final JwtUtil jwtUtil;
+  private final AccessTokenService accessTokenService;
   private final RefreshTokenService refreshTokenService;
   private final UserRepository userRepository;
-  private final UserDetailsService userDetailsService;
   private final PasswordEncoder passwordEncoder;
   private final LoginRateLimiter loginRateLimiter;
   private final PasswordResetService passwordResetService;
   private final PasswordResetTokenRepository passwordResetTokenRepository;
+  private final UserService userService;
 
   public AuthController(
       AuthenticationManager authenticationManager,
       JwtUtil jwtUtil,
+      AccessTokenService accessTokenService,
       RefreshTokenService refreshTokenService,
       UserRepository userRepository,
-      UserDetailsService userDetailsService,
       PasswordEncoder passwordEncoder,
       LoginRateLimiter loginRateLimiter,
       PasswordResetService passwordResetService,
-      PasswordResetTokenRepository passwordResetTokenRepository) {
+      PasswordResetTokenRepository passwordResetTokenRepository,
+      UserService userService) {
     this.authenticationManager = authenticationManager;
     this.jwtUtil = jwtUtil;
+    this.accessTokenService = accessTokenService;
     this.refreshTokenService = refreshTokenService;
     this.userRepository = userRepository;
-    this.userDetailsService = userDetailsService;
     this.passwordEncoder = passwordEncoder;
     this.loginRateLimiter = loginRateLimiter;
     this.passwordResetService = passwordResetService;
     this.passwordResetTokenRepository = passwordResetTokenRepository;
+    this.userService = userService;
   }
 
   @PostMapping("/login")
@@ -116,22 +122,22 @@ public class AuthController {
     }
 
     try {
+      String normalizedEmail = loginRequest.getEmail().toLowerCase(Locale.ROOT).trim();
       Authentication authentication =
           authenticationManager.authenticate(
-              new UsernamePasswordAuthenticationToken(
-                  loginRequest.getUsername(), loginRequest.getPassword()));
+              new UsernamePasswordAuthenticationToken(normalizedEmail, loginRequest.getPassword()));
 
       loginRateLimiter.reset("login:" + clientIp);
 
-      String username = authentication.getName();
+      String email = authentication.getName();
       User user =
           userRepository
-              .findByUsername(username)
+              .findByEmail(email)
               .orElseThrow(
                   () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-      String accessToken = jwtUtil.generateAccessToken(username);
-      String refreshToken = refreshTokenService.generateRefreshToken(username);
+      String accessToken = accessTokenService.generateAccessToken(user.getId());
+      String refreshToken = refreshTokenService.generateRefreshToken(user.getId());
 
       return ResponseEntity.ok(buildLoginResponse(user, accessToken, refreshToken));
     } catch (ResponseStatusException e) {
@@ -175,13 +181,12 @@ public class AuthController {
           @org.springframework.web.bind.annotation.RequestBody
           RefreshTokenRequest refreshTokenRequest) {
     String rawRefreshToken = refreshTokenRequest.getRefreshToken();
-    String username = refreshTokenService.extractUsername(rawRefreshToken);
-    UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-    refreshTokenService.validateRefreshTokenForUser(rawRefreshToken, userDetails);
+    Long userId = refreshTokenService.extractUserId(rawRefreshToken);
+    refreshTokenService.validateRefreshTokenForUser(rawRefreshToken, userId);
 
     User user =
         userRepository
-            .findByUsername(username)
+            .findById(userId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
     if (!Boolean.TRUE.equals(user.getEnabled())) {
@@ -191,8 +196,8 @@ public class AuthController {
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User account is disabled");
     }
 
-    String accessToken = jwtUtil.generateAccessToken(user.getUsername());
-    String newRefreshToken = refreshTokenService.rotate(rawRefreshToken, username);
+    String accessToken = accessTokenService.generateAccessToken(user.getId());
+    String newRefreshToken = refreshTokenService.rotate(rawRefreshToken, userId);
 
     return ResponseEntity.ok(buildLoginResponse(user, accessToken, newRefreshToken));
   }
@@ -292,12 +297,16 @@ public class AuthController {
     }
 
     try {
-      String normalizedEmail = request.getEmail().toLowerCase().trim();
+      String normalizedEmail = request.getEmail().toLowerCase(Locale.ROOT).trim();
       passwordResetService.resetPassword(
           normalizedEmail, request.getOtpCode(), request.getNewPassword());
       userRepository
           .findByEmail(normalizedEmail)
-          .ifPresent(user -> refreshTokenService.revokeAllForUser(user.getUsername()));
+          .ifPresent(
+              user -> {
+                refreshTokenService.revokeAllForUser(user.getId());
+                accessTokenService.revokeAllForUser(user.getId());
+              });
     } catch (IllegalArgumentException e) {
       loginRateLimiter.recordFailure("reset:" + clientIp);
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
@@ -322,86 +331,115 @@ public class AuthController {
             responseCode = "400",
             description = "Invalid request payload",
             content = @Content),
-        @ApiResponse(
-            responseCode = "409",
-            description = "Username already exists",
-            content = @Content)
+        @ApiResponse(responseCode = "409", description = "Email already exists", content = @Content)
       })
   public ResponseEntity<User> register(
       @RequestBody(description = "New user registration details", required = true)
           @Valid
           @org.springframework.web.bind.annotation.RequestBody
           RegisterRequest registerRequest) {
-    if (userRepository.existsByUsername(registerRequest.getUsername())) {
-      throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists");
-    }
-
-    String normalizedEmail = registerRequest.getEmail().toLowerCase().trim();
+    String normalizedEmail = registerRequest.getEmail().toLowerCase(Locale.ROOT).trim();
     if (userRepository.existsByEmail(normalizedEmail)) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already exists");
     }
 
     User user = new User();
-    user.setUsername(registerRequest.getUsername());
+    user.setFirstName(registerRequest.getFirstName());
+    user.setLastName(registerRequest.getLastName());
     user.setEmail(normalizedEmail);
     user.setPassword(passwordEncoder.encode(registerRequest.getPassword()));
-    user.setFullName(registerRequest.getFullName());
     user.setRole(UserRole.EMPLOYEE);
     user.setEnabled(true);
 
-    User savedUser = userRepository.save(user);
-    return ResponseEntity.ok(savedUser);
+    try {
+      User savedUser = userRepository.save(user);
+      return ResponseEntity.ok(savedUser);
+    } catch (DataIntegrityViolationException e) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already exists");
+    }
   }
 
-  @PutMapping("/users/{id}")
-  @Operation(summary = "Update user", description = "Update user information (full name, role)")
+  @PutMapping("/me")
+  @Operation(
+      summary = "Update own profile",
+      description = "Update the authenticated user's first name, last name and email")
   @SecurityRequirement(name = "bearerAuth")
   @ApiResponses(
       value = {
         @ApiResponse(
             responseCode = "200",
-            description = "User updated successfully",
+            description = "Profile updated successfully",
             content =
                 @Content(
                     mediaType = "application/json",
                     schema = @Schema(implementation = User.class))),
         @ApiResponse(
             responseCode = "400",
-            description = "Invalid user update payload",
+            description = "Invalid update payload",
             content = @Content),
         @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
-        @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
+        @ApiResponse(
+            responseCode = "404",
+            description = "Authenticated user not found",
+            content = @Content),
+        @ApiResponse(responseCode = "409", description = "Email already exists", content = @Content)
       })
-  public ResponseEntity<User> updateUser(
-      @Parameter(description = "ID of user to update", example = "1", required = true) @PathVariable
-          Long id,
-      @RequestBody(description = "User update details", required = true)
+  public ResponseEntity<User> updateMe(
+      @RequestBody(description = "Profile update details", required = true)
           @Valid
           @org.springframework.web.bind.annotation.RequestBody
-          UpdateUserRequest updateUserRequest) {
+          UpdateUserRequest updateUserRequest,
+      Authentication authentication) {
+    User user =
+        userRepository
+            .findByEmail(authentication.getName())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+    User updatedUser = userService.updateUserProfile(user, updateUserRequest);
+    return ResponseEntity.ok(updatedUser);
+  }
+
+  @PutMapping("/users/{id}/role")
+  @Operation(
+      summary = "Change user role",
+      description = "Change another user's role (EMPLOYEE or ADMIN). Admin only.")
+  @SecurityRequirement(name = "bearerAuth")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Role changed successfully",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = User.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid role value", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Cannot change own role",
+            content = @Content),
+        @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
+      })
+  public ResponseEntity<User> changeUserRole(
+      @Parameter(description = "ID of user whose role to change", example = "2", required = true)
+          @PathVariable
+          Long id,
+      @RequestBody(description = "New role details", required = true)
+          @Valid
+          @org.springframework.web.bind.annotation.RequestBody
+          ChangeRoleRequest changeRoleRequest,
+      Authentication authentication) {
     User user =
         userRepository
             .findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-    if (updateUserRequest.getFullName() != null) {
-      user.setFullName(updateUserRequest.getFullName());
-    }
-    if (updateUserRequest.getEmail() != null) {
-      String normalizedEmail = updateUserRequest.getEmail().toLowerCase().trim();
-      if (!normalizedEmail.equals(user.getEmail())
-          && userRepository.existsByEmail(normalizedEmail)) {
-        throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already exists");
-      }
-      if (!normalizedEmail.equals(user.getEmail())) {
-        passwordResetTokenRepository.revokeAllForUserId(user.getId());
-      }
-      user.setEmail(normalizedEmail);
-    }
-    if (updateUserRequest.getRole() != null) {
-      user.setRole(UserRole.valueOf(updateUserRequest.getRole().toUpperCase()));
+    if (authentication.getName().equals(user.getEmail())) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot change your own role");
     }
 
+    user.setRole(UserRole.valueOf(changeRoleRequest.getRole().toUpperCase(Locale.ROOT)));
     User updatedUser = userRepository.save(user);
     return ResponseEntity.ok(updatedUser);
   }
@@ -426,7 +464,8 @@ public class AuthController {
             .findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-    refreshTokenService.revokeAllForUser(user.getUsername());
+    refreshTokenService.revokeAllForUser(user.getId());
+    accessTokenService.revokeAllForUser(user.getId());
     userRepository.delete(user);
     return ResponseEntity.noContent().build();
   }
@@ -438,7 +477,9 @@ public class AuthController {
     response.setAccessTokenExpiresIn(jwtUtil.getAccessExpirationMs() / 1000);
     response.setRefreshTokenExpiresIn(jwtUtil.getRefreshExpirationMs() / 1000);
     response.setTokenType("Bearer");
-    response.setUsername(user.getUsername());
+    response.setEmail(user.getEmail());
+    response.setFirstName(user.getFirstName());
+    response.setLastName(user.getLastName());
     response.setRole(user.getRole().name());
     return response;
   }

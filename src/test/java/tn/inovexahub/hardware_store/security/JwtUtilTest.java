@@ -11,6 +11,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 class JwtUtilTest {
 
+  private static final Long USER_ID = 1L;
+
   private JwtUtil jwtUtil;
 
   @BeforeEach
@@ -26,7 +28,7 @@ class JwtUtilTest {
 
   @Test
   void generateAccessToken_Success() {
-    String token = jwtUtil.generateAccessToken("testuser");
+    String token = jwtUtil.generateAccessToken(USER_ID);
 
     assertNotNull(token);
     assertFalse(token.isEmpty());
@@ -34,25 +36,24 @@ class JwtUtilTest {
 
   @Test
   void generateRefreshToken_Success() {
-    String token = jwtUtil.generateRefreshToken("testuser");
+    String token = jwtUtil.generateRefreshToken(USER_ID);
 
     assertNotNull(token);
     assertFalse(token.isEmpty());
   }
 
   @Test
-  void extractUsername_Success() {
-    String username = "testuser";
-    String token = jwtUtil.generateAccessToken(username);
+  void extractUserId_Success() {
+    String token = jwtUtil.generateAccessToken(USER_ID);
 
-    String extractedUsername = jwtUtil.extractUsername(token);
+    Long extractedUserId = jwtUtil.extractUserId(token);
 
-    assertEquals(username, extractedUsername);
+    assertEquals(USER_ID, extractedUserId);
   }
 
   @Test
   void validateAccessToken_ValidToken_Success() {
-    String token = jwtUtil.generateAccessToken("testuser");
+    String token = jwtUtil.generateAccessToken(USER_ID);
 
     boolean isValid = jwtUtil.validateAccessToken(token);
 
@@ -61,7 +62,7 @@ class JwtUtilTest {
 
   @Test
   void validateAccessToken_RefreshTokenAsAccessToken_Failure() {
-    String refreshToken = jwtUtil.generateRefreshToken("testuser");
+    String refreshToken = jwtUtil.generateRefreshToken(USER_ID);
 
     boolean isValid = jwtUtil.validateAccessToken(refreshToken);
 
@@ -78,7 +79,7 @@ class JwtUtilTest {
   @Test
   void validateAccessToken_ExpiredToken_Failure() {
     ReflectionTestUtils.setField(jwtUtil, "accessExpiration", -1000L);
-    String token = jwtUtil.generateAccessToken("testuser");
+    String token = jwtUtil.generateAccessToken(USER_ID);
 
     boolean isValid = jwtUtil.validateAccessToken(token);
 
@@ -87,7 +88,7 @@ class JwtUtilTest {
 
   @Test
   void validateRefreshToken_ValidToken_Success() {
-    String token = jwtUtil.generateRefreshToken("testuser");
+    String token = jwtUtil.generateRefreshToken(USER_ID);
 
     boolean isValid = jwtUtil.validateRefreshToken(token);
 
@@ -96,7 +97,7 @@ class JwtUtilTest {
 
   @Test
   void validateRefreshToken_AccessTokenAsRefreshToken_Failure() {
-    String accessToken = jwtUtil.generateAccessToken("testuser");
+    String accessToken = jwtUtil.generateAccessToken(USER_ID);
 
     boolean isValid = jwtUtil.validateRefreshToken(accessToken);
 
@@ -113,7 +114,7 @@ class JwtUtilTest {
   @Test
   void validateRefreshToken_ExpiredToken_Failure() {
     ReflectionTestUtils.setField(jwtUtil, "refreshExpiration", -1000L);
-    String token = jwtUtil.generateRefreshToken("testuser");
+    String token = jwtUtil.generateRefreshToken(USER_ID);
 
     boolean isValid = jwtUtil.validateRefreshToken(token);
 
@@ -131,37 +132,37 @@ class JwtUtilTest {
   }
 
   @Test
-  void validateAccessTokenAndGetUsername_ValidToken_ReturnsUsername() {
-    String token = jwtUtil.generateAccessToken("testuser");
+  void validateAccessTokenAndGetUserId_ValidToken_ReturnsUserId() {
+    String token = jwtUtil.generateAccessToken(USER_ID);
 
-    String username = jwtUtil.validateAccessTokenAndGetUsername(token);
+    Long userId = jwtUtil.validateAccessTokenAndGetUserId(token);
 
-    assertEquals("testuser", username);
+    assertEquals(USER_ID, userId);
   }
 
   @Test
-  void validateAccessTokenAndGetUsername_RefreshTokenType_ReturnsNull() {
-    String refreshToken = jwtUtil.generateRefreshToken("testuser");
+  void validateAccessTokenAndGetUserId_RefreshTokenType_ReturnsNull() {
+    String refreshToken = jwtUtil.generateRefreshToken(USER_ID);
 
-    String username = jwtUtil.validateAccessTokenAndGetUsername(refreshToken);
+    Long userId = jwtUtil.validateAccessTokenAndGetUserId(refreshToken);
 
-    assertEquals(null, username);
+    assertEquals(null, userId);
   }
 
   @Test
-  void validateAccessTokenAndGetUsername_ExpiredToken_ReturnsNull() {
+  void validateAccessTokenAndGetUserId_ExpiredToken_ReturnsNull() {
     ReflectionTestUtils.setField(jwtUtil, "accessExpiration", -1000L);
-    String token = jwtUtil.generateAccessToken("testuser");
+    String token = jwtUtil.generateAccessToken(USER_ID);
 
-    String username = jwtUtil.validateAccessTokenAndGetUsername(token);
+    Long userId = jwtUtil.validateAccessTokenAndGetUserId(token);
 
-    assertEquals(null, username);
+    assertEquals(null, userId);
   }
 
   @Test
-  void validateAccessTokenAndGetUsername_InvalidToken_ReturnsNull() {
-    String username = jwtUtil.validateAccessTokenAndGetUsername("invalid.token.here");
+  void validateAccessTokenAndGetUserId_InvalidToken_ReturnsNull() {
+    Long userId = jwtUtil.validateAccessTokenAndGetUserId("invalid.token.here");
 
-    assertEquals(null, username);
+    assertEquals(null, userId);
   }
 }

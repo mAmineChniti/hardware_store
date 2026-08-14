@@ -21,16 +21,27 @@ public class UserDetailsServiceImpl implements UserDetailsService {
   }
 
   @Override
-  public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+  public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
     tn.inovexahub.hardware_store.entity.User user =
         userRepository
-            .findByUsername(username)
-            .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+            .findByEmail(email)
+            .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
+    return toUserDetails(user);
+  }
 
+  public UserDetails loadUserById(Long id) throws UsernameNotFoundException {
+    tn.inovexahub.hardware_store.entity.User user =
+        userRepository
+            .findById(id)
+            .orElseThrow(() -> new UsernameNotFoundException("User not found: " + id));
+    return toUserDetails(user);
+  }
+
+  private UserDetails toUserDetails(tn.inovexahub.hardware_store.entity.User user) {
     GrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
     Collection<? extends GrantedAuthority> authorities = Collections.singletonList(authority);
 
     return new User(
-        user.getUsername(), user.getPassword(), user.getEnabled(), true, true, true, authorities);
+        user.getEmail(), user.getPassword(), user.getEnabled(), true, true, true, authorities);
   }
 }
