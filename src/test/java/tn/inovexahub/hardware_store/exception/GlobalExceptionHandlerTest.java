@@ -248,7 +248,6 @@ class GlobalExceptionHandlerTest {
     assertEquals("Parameter 'id' should be of type unknown", response.getBody().getMessage());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   void handleMethodArgumentNotValidException_WithFieldErrors_ReturnsValidationErrors() {
     FieldError fe1 = new FieldError("registerRequest", "username", "Username is required");

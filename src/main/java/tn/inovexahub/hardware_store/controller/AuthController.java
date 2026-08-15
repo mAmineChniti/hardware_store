@@ -36,7 +36,6 @@ import tn.inovexahub.hardware_store.dto.ResetPasswordRequest;
 import tn.inovexahub.hardware_store.dto.UpdateUserRequest;
 import tn.inovexahub.hardware_store.entity.User;
 import tn.inovexahub.hardware_store.enums.UserRole;
-import tn.inovexahub.hardware_store.repository.PasswordResetTokenRepository;
 import tn.inovexahub.hardware_store.repository.UserRepository;
 import tn.inovexahub.hardware_store.security.JwtUtil;
 import tn.inovexahub.hardware_store.security.LoginRateLimiter;
@@ -58,7 +57,6 @@ public class AuthController {
   private final PasswordEncoder passwordEncoder;
   private final LoginRateLimiter loginRateLimiter;
   private final PasswordResetService passwordResetService;
-  private final PasswordResetTokenRepository passwordResetTokenRepository;
   private final UserService userService;
 
   public AuthController(
@@ -70,7 +68,6 @@ public class AuthController {
       PasswordEncoder passwordEncoder,
       LoginRateLimiter loginRateLimiter,
       PasswordResetService passwordResetService,
-      PasswordResetTokenRepository passwordResetTokenRepository,
       UserService userService) {
     this.authenticationManager = authenticationManager;
     this.jwtUtil = jwtUtil;
@@ -80,7 +77,6 @@ public class AuthController {
     this.passwordEncoder = passwordEncoder;
     this.loginRateLimiter = loginRateLimiter;
     this.passwordResetService = passwordResetService;
-    this.passwordResetTokenRepository = passwordResetTokenRepository;
     this.userService = userService;
   }
 

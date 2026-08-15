@@ -23,7 +23,6 @@ public class PasswordResetService {
 
   private final PasswordResetTokenRepository passwordResetTokenRepository;
   private final UserRepository userRepository;
-  private final EmailService emailService;
   private final PasswordEncoder passwordEncoder;
   private final ApplicationEventPublisher applicationEventPublisher;
   private final TransactionTemplate transactionTemplate;
@@ -39,7 +38,6 @@ public class PasswordResetService {
       @Value("${otp.expiry-minutes:10}") int otpExpiryMinutes) {
     this.passwordResetTokenRepository = passwordResetTokenRepository;
     this.userRepository = userRepository;
-    this.emailService = emailService;
     this.passwordEncoder = passwordEncoder;
     this.applicationEventPublisher = applicationEventPublisher;
     this.transactionTemplate = transactionTemplate;

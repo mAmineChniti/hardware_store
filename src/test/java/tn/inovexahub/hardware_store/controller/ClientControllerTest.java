@@ -476,4 +476,17 @@ class ClientControllerTest {
     assertEquals(HttpStatus.OK, response.getStatusCode());
     assertTrue(response.getBody().isEmpty());
   }
+
+  @Test
+  void getClientsNearCreditLimit_NullThreshold_UsesDefault() {
+    Client client = createClient(1L, "Ahmed");
+    when(clientService.getClientsNearCreditLimit(new BigDecimal("100.0")))
+        .thenReturn(List.of(client));
+
+    ResponseEntity<List<Client>> response = clientController.getClientsNearCreditLimit(null);
+
+    assertEquals(HttpStatus.OK, response.getStatusCode());
+    assertEquals(1, response.getBody().size());
+    verify(clientService).getClientsNearCreditLimit(new BigDecimal("100.0"));
+  }
 }
