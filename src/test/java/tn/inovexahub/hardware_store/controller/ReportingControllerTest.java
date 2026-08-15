@@ -33,7 +33,6 @@ class ReportingControllerTest {
 
   private static final LocalDate START_DATE = LocalDate.of(2024, 1, 1);
   private static final LocalDate END_DATE = LocalDate.of(2024, 1, 31);
-  private static final LocalDate INVALID_START = LocalDate.of(2024, 2, 1);
 
   @BeforeEach
   void setUp() {

@@ -179,6 +179,27 @@ class ReportingServiceTest {
     assertBigDecimalEquals(BigDecimal.ZERO, (BigDecimal) stats.get("marginPercentage"));
   }
 
+  @Test
+  void getMarginStats_ZeroRevenue_ReturnsZeroMarginPercentage() {
+    mockDocumentsForDateRange(Arrays.asList(testDocument));
+    DocumentLine lineWithZeroRevenue = new DocumentLine();
+    lineWithZeroRevenue.setUnitCost(new BigDecimal("10.00"));
+    lineWithZeroRevenue.setProduct(testProduct);
+    lineWithZeroRevenue.setQuantity(new BigDecimal("1"));
+    lineWithZeroRevenue.setTotalLineExcludingTax(BigDecimal.ZERO);
+    when(documentLineRepository.findByDocumentId(1L))
+        .thenReturn(Arrays.asList(lineWithZeroRevenue));
+
+    Map<String, Object> stats =
+        reportingService.getMarginStats(LocalDate.now().minusDays(7), LocalDate.now());
+
+    assertNotNull(stats);
+    assertBigDecimalEquals(BigDecimal.ZERO, (BigDecimal) stats.get("totalRevenue"));
+    assertBigDecimalEquals(new BigDecimal("10.00"), (BigDecimal) stats.get("totalCost"));
+    assertBigDecimalEquals(new BigDecimal("-10.00"), (BigDecimal) stats.get("grossMargin"));
+    assertBigDecimalEquals(BigDecimal.ZERO, (BigDecimal) stats.get("marginPercentage"));
+  }
+
   // ==================== Debtor Report Tests ====================
 
   @Test
@@ -204,6 +225,21 @@ class ReportingServiceTest {
     assertNotNull(report);
     assertEquals(0, report.get("debtorCount"));
     assertBigDecimalEquals(BigDecimal.ZERO, (BigDecimal) report.get("totalOutstandingDebt"));
+    assertBigDecimalEquals(BigDecimal.ZERO, (BigDecimal) report.get("totalCreditLimit"));
+    assertBigDecimalEquals(BigDecimal.ZERO, (BigDecimal) report.get("creditUtilization"));
+  }
+
+  @Test
+  void getDebtorReport_ZeroCreditLimit_ReturnsZeroUtilization() {
+    testClient.setCreditLimit(BigDecimal.ZERO);
+    when(clientService.getDebtors()).thenReturn(Arrays.asList(testClient));
+
+    Map<String, Object> report = reportingService.getDebtorReport();
+
+    assertNotNull(report);
+    assertEquals(1, report.get("debtorCount"));
+    assertBigDecimalEquals(
+        new BigDecimal("5000.00"), (BigDecimal) report.get("totalOutstandingDebt"));
     assertBigDecimalEquals(BigDecimal.ZERO, (BigDecimal) report.get("totalCreditLimit"));
     assertBigDecimalEquals(BigDecimal.ZERO, (BigDecimal) report.get("creditUtilization"));
   }

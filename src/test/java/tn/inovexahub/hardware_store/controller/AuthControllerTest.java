@@ -37,7 +37,6 @@ import tn.inovexahub.hardware_store.dto.ResetPasswordRequest;
 import tn.inovexahub.hardware_store.dto.UpdateUserRequest;
 import tn.inovexahub.hardware_store.entity.User;
 import tn.inovexahub.hardware_store.enums.UserRole;
-import tn.inovexahub.hardware_store.repository.PasswordResetTokenRepository;
 import tn.inovexahub.hardware_store.repository.UserRepository;
 import tn.inovexahub.hardware_store.security.JwtUtil;
 import tn.inovexahub.hardware_store.security.LoginRateLimiter;
@@ -57,7 +56,6 @@ class AuthControllerTest {
   @Mock private PasswordEncoder passwordEncoder;
   @Mock private LoginRateLimiter loginRateLimiter;
   @Mock private PasswordResetService passwordResetService;
-  @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
   @Mock private UserService userService;
   @Mock private HttpServletRequest httpRequest;
 
@@ -75,7 +73,6 @@ class AuthControllerTest {
             passwordEncoder,
             loginRateLimiter,
             passwordResetService,
-            passwordResetTokenRepository,
             userService);
   }
 

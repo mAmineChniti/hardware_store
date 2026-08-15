@@ -468,6 +468,30 @@ class DocumentServiceTest {
   }
 
   @Test
+  void validateDocument_CreditSale_NullClient_SkipsCreditCheck() {
+    Document blDoc = createDraftDocument(DocumentType.DELIVERY_NOTE);
+    blDoc.setClient(null);
+    blDoc.setIsCreditSale(true);
+    blDoc.setTotalIncludingTax(new BigDecimal("500.00"));
+
+    DocumentLine line = new DocumentLine();
+    line.setId(1L);
+    line.setDocument(blDoc);
+    line.setProduct(testProduct);
+    line.setQuantity(new BigDecimal("10"));
+    line.setIsDelivered(false);
+
+    when(documentRepository.findById(1L)).thenReturn(Optional.of(blDoc));
+    when(documentLineRepository.findByDocumentId(1L)).thenReturn(Arrays.asList(line));
+    when(documentRepository.save(any(Document.class))).thenReturn(blDoc);
+
+    documentService.validateDocument(1L);
+
+    verify(clientService, never()).validateCreditLimit(any(), any());
+    verify(clientService, never()).addCreditHistoryEntry(any(), any(), any(), any());
+  }
+
+  @Test
   void validateDocument_Invoice_DeductsStock() {
     Document invoiceDoc = createDraftDocument(DocumentType.INVOICE);
     invoiceDoc.setClient(testClient);
