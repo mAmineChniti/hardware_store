@@ -17,8 +17,6 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
   @Query("SELECT t FROM PasswordResetToken t WHERE t.user.id = :userId AND t.used = false")
   Optional<PasswordResetToken> findByUserIdAndUsedFalseForUpdate(@Param("userId") Long userId);
 
-  Optional<PasswordResetToken> findByUserIdAndUsedFalse(@Param("userId") Long userId);
-
   @Modifying
   @Query("DELETE FROM PasswordResetToken t WHERE t.user.id = :userId AND t.used = false")
   void revokeAllActiveForUserId(@Param("userId") Long userId);

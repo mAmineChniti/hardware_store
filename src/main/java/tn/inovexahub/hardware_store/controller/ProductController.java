@@ -12,9 +12,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,13 +25,25 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
-import tn.inovexahub.hardware_store.dto.ProductCostRequest;
-import tn.inovexahub.hardware_store.dto.ProductCostResponse;
+import tn.inovexahub.hardware_store.dto.BatchRequest;
+import tn.inovexahub.hardware_store.dto.CreateProductRequest;
+import tn.inovexahub.hardware_store.dto.CreateVariantRequest;
+import tn.inovexahub.hardware_store.dto.UpdateBatchPricingRequest;
+import tn.inovexahub.hardware_store.dto.UpdateBatchQuantityRequest;
+import tn.inovexahub.hardware_store.dto.UpdateStockRequest;
+import tn.inovexahub.hardware_store.dto.UpdateVariantRequest;
 import tn.inovexahub.hardware_store.entity.Product;
+import tn.inovexahub.hardware_store.entity.ProductBatch;
 import tn.inovexahub.hardware_store.entity.ProductConditioning;
-import tn.inovexahub.hardware_store.entity.ProductCost;
+import tn.inovexahub.hardware_store.entity.ProductVariant;
 import tn.inovexahub.hardware_store.entity.Supplier;
+import tn.inovexahub.hardware_store.exception.ProductNotFoundException;
+import tn.inovexahub.hardware_store.exception.ProductVariantNotFoundException;
+import tn.inovexahub.hardware_store.exception.SkuAlreadyExistsException;
+import tn.inovexahub.hardware_store.exception.SupplierNotFoundException;
+import tn.inovexahub.hardware_store.service.ProductBatchService;
 import tn.inovexahub.hardware_store.service.ProductService;
+import tn.inovexahub.hardware_store.service.ProductVariantService;
 import tn.inovexahub.hardware_store.service.SupplierService;
 
 @RestController
@@ -44,10 +54,18 @@ public class ProductController {
 
   private final ProductService productService;
   private final SupplierService supplierService;
+  private final ProductBatchService productBatchService;
+  private final ProductVariantService productVariantService;
 
-  public ProductController(ProductService productService, SupplierService supplierService) {
+  public ProductController(
+      ProductService productService,
+      SupplierService supplierService,
+      ProductBatchService productBatchService,
+      ProductVariantService productVariantService) {
     this.productService = productService;
     this.supplierService = supplierService;
+    this.productBatchService = productBatchService;
+    this.productVariantService = productVariantService;
   }
 
   // ==================== Product CRUD ====================
@@ -121,7 +139,9 @@ public class ProductController {
 
   @PostMapping
   @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
-  @Operation(summary = "Create new product", description = "Create a new product")
+  @Operation(
+      summary = "Create new product",
+      description = "Create a new product with initial batch and optional default supplier")
   @ApiResponses(
       value = {
         @ApiResponse(
@@ -139,14 +159,41 @@ public class ProductController {
         @ApiResponse(
             responseCode = "403",
             description = "Forbidden - insufficient role privileges",
-            content = @Content)
+            content = @Content),
+        @ApiResponse(responseCode = "404", description = "Supplier not found", content = @Content)
       })
   public ResponseEntity<Product> createProduct(
-      @RequestBody(description = "Product creation payload", required = true)
+      @RequestBody(description = "Product and initial batch details", required = true)
           @Valid
           @org.springframework.web.bind.annotation.RequestBody
-          Product product) {
-    Product createdProduct = productService.createProduct(product);
+          CreateProductRequest request) {
+
+    Product product = new Product();
+    product.setReference(request.getReference());
+    product.setName(request.getName());
+    product.setDescription(request.getDescription());
+    product.setImage(request.getImage());
+    product.setCategory(request.getCategory());
+    product.setUnitType(request.getUnitType());
+    product.setBaseUnit(request.getBaseUnit());
+
+    if (request.getSupplierId() != null) {
+      Supplier supplier =
+          supplierService
+              .getSupplierById(request.getSupplierId())
+              .orElseThrow(
+                  () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Supplier not found"));
+      product.setSupplier(supplier);
+    }
+
+    Product createdProduct =
+        productService.createProductWithInitialBatch(
+            product,
+            request.getInitialQuantity(),
+            request.getInitialUnitCost(),
+            request.getInitialUnitPrice(),
+            request.getSupplierId(),
+            request.getNotes());
     return ResponseEntity.status(HttpStatus.CREATED).body(createdProduct);
   }
 
@@ -260,25 +307,6 @@ public class ProductController {
           @PathVariable
           String category) {
     return ResponseEntity.ok(productService.getProductsByCategory(category));
-  }
-
-  @GetMapping("/heavy-materials")
-  @Operation(
-      summary = "Get heavy materials",
-      description = "Retrieve all products marked as heavy materials (dual pricing)")
-  @ApiResponses(
-      value = {
-        @ApiResponse(
-            responseCode = "200",
-            description = "Heavy material products retrieved",
-            content =
-                @Content(
-                    mediaType = "application/json",
-                    array = @ArraySchema(schema = @Schema(implementation = Product.class)))),
-        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content)
-      })
-  public ResponseEntity<List<Product>> getHeavyMaterials() {
-    return ResponseEntity.ok(productService.getHeavyMaterials());
   }
 
   @GetMapping("/low-stock")
@@ -408,6 +436,8 @@ public class ProductController {
       ProductConditioning updatedConditioning =
           productService.updateProductConditioning(id, conditioningDetails);
       return ResponseEntity.ok(updatedConditioning);
+    } catch (IllegalArgumentException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
     } catch (RuntimeException e) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
     }
@@ -434,226 +464,6 @@ public class ProductController {
           Long id) {
     productService.deleteProductConditioning(id);
     return ResponseEntity.noContent().build();
-  }
-
-  // ==================== Product Costs ====================
-
-  @GetMapping("/{productId}/costs")
-  @Operation(
-      summary = "Get product cost history",
-      description = "Retrieve the complete cost history for a product")
-  @ApiResponses(
-      value = {
-        @ApiResponse(
-            responseCode = "200",
-            description = "Cost history retrieved",
-            content =
-                @Content(
-                    mediaType = "application/json",
-                    array =
-                        @ArraySchema(
-                            schema = @Schema(implementation = ProductCostResponse.class)))),
-        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
-        @ApiResponse(responseCode = "404", description = "Product not found", content = @Content)
-      })
-  public ResponseEntity<List<ProductCostResponse>> getProductCostHistory(
-      @Parameter(description = "Product ID", example = "1", required = true) @PathVariable
-          Long productId) {
-    Product product = requireProduct(productId);
-    List<ProductCostResponse> responses =
-        productService.getProductCostHistory(productId).stream()
-            .map(cost -> toResponse(cost, product))
-            .toList();
-    return ResponseEntity.ok(responses);
-  }
-
-  @GetMapping("/{productId}/costs/current")
-  @Operation(
-      summary = "Get current product cost",
-      description = "Retrieve the most recent cost for a product")
-  @ApiResponses(
-      value = {
-        @ApiResponse(
-            responseCode = "200",
-            description = "Current product cost retrieved",
-            content =
-                @Content(
-                    mediaType = "application/json",
-                    schema = @Schema(implementation = ProductCostResponse.class))),
-        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
-        @ApiResponse(
-            responseCode = "404",
-            description = "Product not found, or no cost entry found",
-            content = @Content)
-      })
-  public ResponseEntity<ProductCostResponse> getCurrentProductCost(
-      @Parameter(description = "Product ID", example = "1", required = true) @PathVariable
-          Long productId) {
-    Product product = requireProduct(productId);
-    return productService
-        .getCurrentProductCost(productId)
-        .map(cost -> toResponse(cost, product))
-        .map(ResponseEntity::ok)
-        .orElse(ResponseEntity.notFound().build());
-  }
-
-  @PostMapping("/{productId}/costs")
-  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
-  @Operation(
-      summary = "Add product cost",
-      description = "Add a new cost entry for a product (updates PAMP)")
-  @ApiResponses(
-      value = {
-        @ApiResponse(
-            responseCode = "201",
-            description = "Product cost created",
-            content =
-                @Content(
-                    mediaType = "application/json",
-                    schema = @Schema(implementation = ProductCostResponse.class))),
-        @ApiResponse(responseCode = "400", description = "Invalid parameters", content = @Content),
-        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
-        @ApiResponse(
-            responseCode = "403",
-            description = "Forbidden - insufficient role privileges",
-            content = @Content),
-        @ApiResponse(
-            responseCode = "404",
-            description = "Product or supplier not found",
-            content = @Content)
-      })
-  public ResponseEntity<ProductCostResponse> addProductCost(
-      @Parameter(description = "Product ID", example = "1", required = true) @PathVariable
-          Long productId,
-      @RequestBody(description = "Product cost creation payload", required = true)
-          @Valid
-          @org.springframework.web.bind.annotation.RequestBody
-          ProductCostRequest productCostRequest) {
-    Product product = requireProduct(productId);
-
-    Supplier supplier = null;
-    if (productCostRequest.getSupplierId() != null) {
-      supplier =
-          supplierService
-              .getSupplierById(productCostRequest.getSupplierId())
-              .orElseThrow(
-                  () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Supplier not found"));
-    }
-
-    try {
-      ProductCost productCost =
-          productService.addProductCost(
-              productId,
-              productCostRequest.getUnitCost(),
-              productCostRequest.getEffectiveDate(),
-              supplier,
-              productCostRequest.getNotes());
-      return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(productCost, product));
-    } catch (RuntimeException e) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
-    }
-  }
-
-  @GetMapping("/{productId}/costs/{date}")
-  @Operation(
-      summary = "Get product cost for specific date",
-      description = "Retrieve the cost for a product on a specific date")
-  @ApiResponses(
-      value = {
-        @ApiResponse(
-            responseCode = "200",
-            description = "Cost entry retrieved",
-            content =
-                @Content(
-                    mediaType = "application/json",
-                    schema = @Schema(implementation = ProductCostResponse.class))),
-        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
-        @ApiResponse(
-            responseCode = "404",
-            description = "Product not found, or cost entry not found",
-            content = @Content)
-      })
-  public ResponseEntity<ProductCostResponse> getProductCostForDate(
-      @Parameter(description = "Product ID", example = "1", required = true) @PathVariable
-          Long productId,
-      @Parameter(description = "Target date", example = "2024-01-01", required = true)
-          @PathVariable
-          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-          LocalDate date) {
-    Product product = requireProduct(productId);
-    return productService
-        .getProductCostForDate(productId, date)
-        .map(cost -> toResponse(cost, product))
-        .map(ResponseEntity::ok)
-        .orElse(ResponseEntity.notFound().build());
-  }
-
-  @GetMapping("/{productId}/costs/between")
-  @Operation(
-      summary = "Get product costs between dates",
-      description = "Retrieve costs for a product within a date range")
-  @ApiResponses(
-      value = {
-        @ApiResponse(
-            responseCode = "200",
-            description = "Cost entries retrieved",
-            content =
-                @Content(
-                    mediaType = "application/json",
-                    array =
-                        @ArraySchema(
-                            schema = @Schema(implementation = ProductCostResponse.class)))),
-        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
-        @ApiResponse(responseCode = "404", description = "Product not found", content = @Content)
-      })
-  public ResponseEntity<List<ProductCostResponse>> getProductCostsBetweenDates(
-      @Parameter(description = "Product ID", example = "1", required = true) @PathVariable
-          Long productId,
-      @Parameter(description = "Start date", example = "2024-01-01", required = true)
-          @RequestParam
-          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-          LocalDate startDate,
-      @Parameter(description = "End date", example = "2024-01-31", required = true)
-          @RequestParam
-          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-          LocalDate endDate) {
-    Product product = requireProduct(productId);
-    List<ProductCostResponse> responses =
-        productService.getProductCostsBetweenDates(productId, startDate, endDate).stream()
-            .map(cost -> toResponse(cost, product))
-            .toList();
-    return ResponseEntity.ok(responses);
-  }
-
-  @DeleteMapping("/costs/{id}")
-  @PreAuthorize("hasRole('ADMIN')")
-  @Operation(summary = "Delete product cost", description = "Delete a product cost entry")
-  @ApiResponses(
-      value = {
-        @ApiResponse(
-            responseCode = "204",
-            description = "Product cost deleted",
-            content = @Content),
-        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
-        @ApiResponse(
-            responseCode = "403",
-            description = "Forbidden - admin access required",
-            content = @Content),
-        @ApiResponse(
-            responseCode = "404",
-            description = "Product cost not found",
-            content = @Content)
-      })
-  public ResponseEntity<Void> deleteProductCost(
-      @Parameter(description = "Cost entry ID to delete", example = "1", required = true)
-          @PathVariable
-          Long id) {
-    try {
-      productService.deleteProductCost(id);
-      return ResponseEntity.noContent().build();
-    } catch (RuntimeException e) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
-    }
   }
 
   // ==================== Stock Management ====================
@@ -686,41 +496,471 @@ public class ProductController {
   public ResponseEntity<Product> updateStockQuantity(
       @Parameter(description = "Product ID", example = "1", required = true) @PathVariable
           Long productId,
-      @Parameter(
-              description = "Stock quantity change (+10 to add, -5 to subtract)",
-              example = "10.0",
-              required = true)
-          @RequestParam
-          BigDecimal quantityChange) {
+      @RequestBody(description = "Stock update details", required = true)
+          @Valid
+          @org.springframework.web.bind.annotation.RequestBody
+          UpdateStockRequest stockRequest) {
     try {
-      productService.updateStockQuantity(productId, quantityChange);
+      productService.updateStockQuantity(productId, stockRequest.getQuantityChange());
       return productService
           .getProductById(productId)
           .map(ResponseEntity::ok)
           .orElse(ResponseEntity.notFound().build());
+    } catch (tn.inovexahub.hardware_store.exception.ProductNotFoundException e) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
     } catch (RuntimeException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
     }
   }
 
-  private Product requireProduct(Long productId) {
-    return productService
-        .getProductById(productId)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
+  // ==================== Product Batch Management ====================
+
+  @PostMapping("/{productId}/batches")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(
+      summary = "Add inventory batch",
+      description = "Add a new inventory batch for FIFO cost tracking")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "201",
+            description = "Batch created successfully",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = ProductBatch.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid request", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(responseCode = "404", description = "Product not found", content = @Content)
+      })
+  public ResponseEntity<ProductBatch> addBatch(
+      @Parameter(description = "Product ID", example = "1", required = true) @PathVariable
+          Long productId,
+      @RequestBody(description = "Batch details", required = true)
+          @Valid
+          @org.springframework.web.bind.annotation.RequestBody
+          BatchRequest batchRequest) {
+    try {
+      ProductBatch batch =
+          productBatchService.addBatch(
+              productId,
+              batchRequest.getQuantity(),
+              batchRequest.getUnitCost(),
+              batchRequest.getUnitPrice(),
+              batchRequest.getSupplierId(),
+              batchRequest.getNotes());
+      return ResponseEntity.status(HttpStatus.CREATED).body(batch);
+    } catch (tn.inovexahub.hardware_store.exception.ProductNotFoundException e) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+    } catch (tn.inovexahub.hardware_store.exception.SupplierNotFoundException e) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+    } catch (RuntimeException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
   }
 
-  private ProductCostResponse toResponse(ProductCost cost, Product product) {
-    ProductCostResponse response = new ProductCostResponse();
-    response.setId(cost.getId());
-    response.setProductId(product.getId());
-    response.setProductName(product.getName());
-    response.setUnitCost(cost.getUnitCost());
-    response.setEffectiveDate(cost.getEffectiveDate());
-    if (cost.getSupplier() != null) {
-      response.setSupplier(cost.getSupplier().getName());
+  @GetMapping("/{productId}/batches")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(
+      summary = "Get product batches",
+      description = "Get all batches for a product ordered by creation date (oldest first)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Batches retrieved successfully",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    array = @ArraySchema(schema = @Schema(implementation = ProductBatch.class)))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content)
+      })
+  public ResponseEntity<List<ProductBatch>> getBatches(
+      @Parameter(description = "Product ID", example = "1", required = true) @PathVariable
+          Long productId) {
+    return ResponseEntity.ok(productBatchService.getBatchesByProductId(productId));
+  }
+
+  @GetMapping("/{productId}/batches/available")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(
+      summary = "Get available batches",
+      description = "Get batches with remaining quantity for a product")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Available batches retrieved successfully",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    array = @ArraySchema(schema = @Schema(implementation = ProductBatch.class)))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content)
+      })
+  public ResponseEntity<List<ProductBatch>> getAvailableBatches(
+      @Parameter(description = "Product ID", example = "1", required = true) @PathVariable
+          Long productId) {
+    return ResponseEntity.ok(productBatchService.getAvailableBatchesByProductId(productId));
+  }
+
+  @PutMapping("/batches/{batchId}/quantity")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(
+      summary = "Update batch quantity",
+      description = "Update the quantity of a batch (for corrections)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Batch quantity updated successfully",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = ProductBatch.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid quantity", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(responseCode = "404", description = "Batch not found", content = @Content)
+      })
+  public ResponseEntity<ProductBatch> updateBatchQuantity(
+      @Parameter(description = "Batch ID", example = "1", required = true) @PathVariable
+          Long batchId,
+      @RequestBody(description = "Batch quantity update details", required = true)
+          @Valid
+          @org.springframework.web.bind.annotation.RequestBody
+          UpdateBatchQuantityRequest quantityRequest) {
+    try {
+      ProductBatch batch =
+          productBatchService.updateBatchQuantity(batchId, quantityRequest.getQuantity());
+      return ResponseEntity.ok(batch);
+    } catch (tn.inovexahub.hardware_store.exception.ProductBatchNotFoundException e) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+    } catch (RuntimeException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
     }
-    response.setNotes(cost.getNotes());
-    response.setCreatedAt(cost.getCreatedAt());
-    return response;
+  }
+
+  @PutMapping("/batches/{batchId}/pricing")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(
+      summary = "Update batch pricing",
+      description =
+          "Update the cost and selling price of a batch. Price must be >= cost unless admin override is used.")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Batch pricing updated successfully",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = ProductBatch.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid pricing", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(responseCode = "404", description = "Batch not found", content = @Content)
+      })
+  public ResponseEntity<ProductBatch> updateBatchPricing(
+      @Parameter(description = "Batch ID", example = "1", required = true) @PathVariable
+          Long batchId,
+      @RequestBody(description = "Batch pricing update details", required = true)
+          @Valid
+          @org.springframework.web.bind.annotation.RequestBody
+          UpdateBatchPricingRequest pricingRequest,
+      @Parameter(hidden = true) org.springframework.security.core.Authentication authentication) {
+    try {
+      boolean isAdmin =
+          authentication.getAuthorities().stream()
+              .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+      boolean effectiveOverride = Boolean.TRUE.equals(pricingRequest.getAdminOverride()) && isAdmin;
+      ProductBatch batch =
+          productBatchService.updateBatchPricing(
+              batchId,
+              pricingRequest.getUnitCost(),
+              pricingRequest.getUnitPrice(),
+              effectiveOverride);
+      return ResponseEntity.ok(batch);
+    } catch (tn.inovexahub.hardware_store.exception.ProductBatchNotFoundException e) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+    } catch (RuntimeException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+  }
+
+  @DeleteMapping("/batches/{batchId}")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(summary = "Delete batch", description = "Delete a batch and update product stock")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "204",
+            description = "Batch deleted successfully",
+            content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(responseCode = "404", description = "Batch not found", content = @Content)
+      })
+  public ResponseEntity<Void> deleteBatch(
+      @Parameter(description = "Batch ID", example = "1", required = true) @PathVariable
+          Long batchId) {
+    try {
+      productBatchService.deleteBatch(batchId);
+      return ResponseEntity.noContent().build();
+    } catch (tn.inovexahub.hardware_store.exception.ProductBatchNotFoundException e) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+    } catch (RuntimeException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+  }
+
+  // ==================== Product Variants ====================
+
+  @PostMapping("/{productId}/variants")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(
+      summary = "Create product variant",
+      description = "Create a new variant for a product with flexible JSON attributes")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "201",
+            description = "Variant created successfully",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = ProductVariant.class))),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Invalid request payload",
+            content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(responseCode = "404", description = "Product not found", content = @Content),
+        @ApiResponse(responseCode = "409", description = "SKU already exists", content = @Content)
+      })
+  public ResponseEntity<ProductVariant> createVariant(
+      @Parameter(description = "Product ID", example = "1", required = true) @PathVariable
+          Long productId,
+      @RequestBody(description = "Variant creation details", required = true)
+          @Valid
+          @org.springframework.web.bind.annotation.RequestBody
+          CreateVariantRequest variantRequest) {
+    try {
+      ProductVariant variant =
+          productVariantService.createVariant(
+              productId,
+              variantRequest.getSku(),
+              variantRequest.getVariantName(),
+              variantRequest.getAttributes());
+      return ResponseEntity.status(HttpStatus.CREATED).body(variant);
+    } catch (ProductNotFoundException e) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+    } catch (SkuAlreadyExistsException e) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
+    } catch (IllegalArgumentException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+  }
+
+  @GetMapping("/{productId}/variants")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(
+      summary = "Get product variants",
+      description = "Get all variants for a product ordered by name")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Variants retrieved successfully",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    array = @ArraySchema(schema = @Schema(implementation = ProductVariant.class)))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content)
+      })
+  public ResponseEntity<List<ProductVariant>> getVariants(
+      @Parameter(description = "Product ID", example = "1", required = true) @PathVariable
+          Long productId) {
+    return ResponseEntity.ok(productVariantService.getVariantsByProductId(productId));
+  }
+
+  @GetMapping("/variants/{variantId}")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(summary = "Get variant by ID", description = "Get a specific variant by its ID")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Variant retrieved",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = ProductVariant.class))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(responseCode = "404", description = "Variant not found", content = @Content)
+      })
+  public ResponseEntity<ProductVariant> getVariantById(
+      @Parameter(description = "Variant ID", example = "1", required = true) @PathVariable
+          Long variantId) {
+    return productVariantService
+        .getVariantById(variantId)
+        .map(ResponseEntity::ok)
+        .orElse(ResponseEntity.notFound().build());
+  }
+
+  @PutMapping("/variants/{variantId}")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(summary = "Update variant", description = "Update an existing variant")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Variant updated successfully",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = ProductVariant.class))),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Invalid request payload",
+            content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(responseCode = "404", description = "Variant not found", content = @Content),
+        @ApiResponse(responseCode = "409", description = "SKU already exists", content = @Content)
+      })
+  public ResponseEntity<ProductVariant> updateVariant(
+      @Parameter(description = "Variant ID", example = "1", required = true) @PathVariable
+          Long variantId,
+      @RequestBody(description = "Variant update details", required = true)
+          @Valid
+          @org.springframework.web.bind.annotation.RequestBody
+          UpdateVariantRequest variantRequest) {
+    try {
+      ProductVariant variant =
+          productVariantService.updateVariant(
+              variantId,
+              variantRequest.getSku(),
+              variantRequest.getVariantName(),
+              variantRequest.getAttributes());
+      return ResponseEntity.ok(variant);
+    } catch (ProductVariantNotFoundException e) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+    } catch (SkuAlreadyExistsException e) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
+    } catch (IllegalArgumentException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+  }
+
+  @DeleteMapping("/variants/{variantId}")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(summary = "Delete variant", description = "Delete a variant")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "204",
+            description = "Variant deleted successfully",
+            content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(responseCode = "404", description = "Variant not found", content = @Content)
+      })
+  public ResponseEntity<Void> deleteVariant(
+      @Parameter(description = "Variant ID", example = "1", required = true) @PathVariable
+          Long variantId) {
+    try {
+      productVariantService.deleteVariant(variantId);
+      return ResponseEntity.noContent().build();
+    } catch (ProductVariantNotFoundException e) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+    } catch (IllegalArgumentException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+  }
+
+  @PostMapping("/variants/{variantId}/batches")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(
+      summary = "Add batch to variant",
+      description = "Add a new inventory batch to a specific variant")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "201",
+            description = "Batch added successfully",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = ProductBatch.class))),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Invalid request payload",
+            content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(responseCode = "404", description = "Variant not found", content = @Content)
+      })
+  public ResponseEntity<ProductBatch> addBatchToVariant(
+      @Parameter(description = "Variant ID", example = "1", required = true) @PathVariable
+          Long variantId,
+      @RequestBody(description = "Batch details", required = true)
+          @Valid
+          @org.springframework.web.bind.annotation.RequestBody
+          BatchRequest batchRequest) {
+    try {
+      ProductBatch batch =
+          productBatchService.addBatchForVariant(
+              variantId,
+              batchRequest.getQuantity(),
+              batchRequest.getUnitCost(),
+              batchRequest.getUnitPrice(),
+              batchRequest.getSupplierId(),
+              batchRequest.getNotes());
+      return ResponseEntity.status(HttpStatus.CREATED).body(batch);
+    } catch (ProductVariantNotFoundException e) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+    } catch (SupplierNotFoundException e) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+    } catch (IllegalArgumentException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+  }
+
+  @GetMapping("/variants/{variantId}/batches")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(
+      summary = "Get variant batches",
+      description = "Get all batches for a variant ordered by creation date (oldest first)")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Batches retrieved successfully",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    array = @ArraySchema(schema = @Schema(implementation = ProductBatch.class)))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content)
+      })
+  public ResponseEntity<List<ProductBatch>> getVariantBatches(
+      @Parameter(description = "Variant ID", example = "1", required = true) @PathVariable
+          Long variantId) {
+    return ResponseEntity.ok(productBatchService.getBatchesByVariantId(variantId));
+  }
+
+  @GetMapping("/variants/{variantId}/batches/available")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(
+      summary = "Get available variant batches",
+      description = "Get batches with remaining quantity for a variant")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Available batches retrieved successfully",
+            content =
+                @Content(
+                    mediaType = "application/json",
+                    array = @ArraySchema(schema = @Schema(implementation = ProductBatch.class)))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content)
+      })
+  public ResponseEntity<List<ProductBatch>> getAvailableVariantBatches(
+      @Parameter(description = "Variant ID", example = "1", required = true) @PathVariable
+          Long variantId) {
+    return ResponseEntity.ok(productBatchService.getAvailableBatchesByVariantId(variantId));
   }
 }

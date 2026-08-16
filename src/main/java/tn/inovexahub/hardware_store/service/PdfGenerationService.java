@@ -13,8 +13,10 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.springframework.stereotype.Service;
+import tn.inovexahub.hardware_store.entity.Client;
 import tn.inovexahub.hardware_store.entity.Document;
 import tn.inovexahub.hardware_store.entity.DocumentLine;
+import tn.inovexahub.hardware_store.entity.PaymentReceipt;
 import tn.inovexahub.hardware_store.enums.DocumentType;
 
 @Service
@@ -76,7 +78,7 @@ public class PdfGenerationService {
       yPosition = drawTotals(contentStream, document, yPosition);
 
       // Draw footer
-      drawFooter(contentStream, document);
+      drawFooter(contentStream, document.getDate().format(DATE_FORMAT));
 
       contentStream.close();
 
@@ -117,50 +119,176 @@ public class PdfGenerationService {
     return yPosition - LINE_HEIGHT * 2;
   }
 
+  /** Draw the client details block starting at the given y position, returning the last y used. */
+  private float drawClientDetails(PDPageContentStream contentStream, Client client, float yPosition)
+      throws IOException {
+    contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 14);
+    contentStream.beginText();
+    contentStream.newLineAtOffset(MARGIN, yPosition);
+    contentStream.showText("Client:");
+    contentStream.endText();
+
+    contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+    float currentY = yPosition - LINE_HEIGHT;
+
+    contentStream.beginText();
+    contentStream.newLineAtOffset(MARGIN, currentY);
+    contentStream.showText(client.getName());
+    contentStream.endText();
+
+    if (client.getAddress() != null) {
+      currentY -= LINE_HEIGHT;
+      contentStream.beginText();
+      contentStream.newLineAtOffset(MARGIN, currentY);
+      contentStream.showText(client.getAddress());
+      contentStream.endText();
+    }
+
+    if (client.getPhone() != null) {
+      currentY -= LINE_HEIGHT;
+      contentStream.beginText();
+      contentStream.newLineAtOffset(MARGIN, currentY);
+      contentStream.showText("Tél: " + client.getPhone());
+      contentStream.endText();
+    }
+
+    if (client.getTaxIdentificationNumber() != null) {
+      currentY -= LINE_HEIGHT;
+      contentStream.beginText();
+      contentStream.newLineAtOffset(MARGIN, currentY);
+      contentStream.showText("Matricule Fiscal: " + client.getTaxIdentificationNumber());
+      contentStream.endText();
+    }
+
+    return currentY;
+  }
+
   private float drawClientInfo(
       PDPageContentStream contentStream, Document document, float yPosition) throws IOException {
     if (document.getClient() != null) {
-      contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 14);
-      contentStream.beginText();
-      contentStream.newLineAtOffset(MARGIN, yPosition);
-      contentStream.showText("Client:");
-      contentStream.endText();
-
-      contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
-      yPosition -= LINE_HEIGHT;
-
-      contentStream.beginText();
-      contentStream.newLineAtOffset(MARGIN, yPosition);
-      contentStream.showText(document.getClient().getName());
-      contentStream.endText();
-
-      if (document.getClient().getAddress() != null) {
-        yPosition -= LINE_HEIGHT;
-        contentStream.beginText();
-        contentStream.newLineAtOffset(MARGIN, yPosition);
-        contentStream.showText(document.getClient().getAddress());
-        contentStream.endText();
-      }
-
-      if (document.getClient().getPhone() != null) {
-        yPosition -= LINE_HEIGHT;
-        contentStream.beginText();
-        contentStream.newLineAtOffset(MARGIN, yPosition);
-        contentStream.showText("Tél: " + document.getClient().getPhone());
-        contentStream.endText();
-      }
-
-      if (document.getClient().getTaxIdentificationNumber() != null) {
-        yPosition -= LINE_HEIGHT;
-        contentStream.beginText();
-        contentStream.newLineAtOffset(MARGIN, yPosition);
-        contentStream.showText(
-            "Matricule Fiscal: " + document.getClient().getTaxIdentificationNumber());
-        contentStream.endText();
-      }
+      return drawClientDetails(contentStream, document.getClient(), yPosition) - LINE_HEIGHT * 2;
     }
-
     return yPosition - LINE_HEIGHT * 2;
+  }
+
+  /**
+   * Generate PDF for a payment receipt.
+   *
+   * @param receipt Payment receipt to generate PDF for
+   * @return PDF as byte array
+   * @throws IOException if PDF generation fails
+   */
+  public byte[] generatePaymentReceiptPdf(PaymentReceipt receipt) throws IOException {
+    try (PDDocument doc = new PDDocument()) {
+      PDPage page = new PDPage(PDRectangle.A4);
+      doc.addPage(page);
+
+      try (PDPageContentStream cs =
+          new PDPageContentStream(doc, page, PDPageContentStream.AppendMode.APPEND, true)) {
+
+        float y = PDRectangle.A4.getHeight() - MARGIN;
+
+        // Header
+        cs.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 18);
+        cs.beginText();
+        cs.newLineAtOffset(MARGIN, y);
+        cs.showText("REÇU DE PAIEMENT");
+        cs.endText();
+
+        // Receipt number
+        y -= LINE_HEIGHT * 2;
+        cs.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+        cs.beginText();
+        cs.newLineAtOffset(MARGIN, y);
+        cs.showText("Numéro: " + receipt.getReceiptNumber());
+        cs.endText();
+
+        // Date
+        y -= LINE_HEIGHT;
+        cs.beginText();
+        cs.newLineAtOffset(MARGIN, y);
+        cs.showText("Date: " + receipt.getPaymentDate().format(DATE_FORMAT));
+        cs.endText();
+
+        // Payment method
+        y -= LINE_HEIGHT;
+        cs.beginText();
+        cs.newLineAtOffset(MARGIN, y);
+        cs.showText("Mode de paiement: " + receipt.getPaymentMethod());
+        cs.endText();
+
+        // Client section
+        if (receipt.getClient() != null) {
+          y -= LINE_HEIGHT * 2;
+          y = drawClientDetails(cs, receipt.getClient(), y);
+        }
+
+        // Payment details
+        y -= LINE_HEIGHT * 2;
+        NumberFormat fmt = getCurrencyFormat();
+
+        cs.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 14);
+        cs.beginText();
+        cs.newLineAtOffset(MARGIN, y);
+        cs.showText("Détails du paiement:");
+        cs.endText();
+
+        cs.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+        y -= LINE_HEIGHT;
+
+        // Amount paid is required by the receipt contract; debt snapshots default to zero
+        BigDecimal amountPaid = receipt.getAmountPaid();
+        if (amountPaid == null) {
+          throw new IllegalArgumentException("Amount paid is required to generate the receipt PDF");
+        }
+        BigDecimal previousDebt =
+            receipt.getPreviousDebt() != null ? receipt.getPreviousDebt() : BigDecimal.ZERO;
+        BigDecimal newDebt = receipt.getNewDebt() != null ? receipt.getNewDebt() : BigDecimal.ZERO;
+
+        cs.beginText();
+        cs.newLineAtOffset(MARGIN, y);
+        cs.showText("Montant payé: " + formatCurrency(fmt, amountPaid) + " DT");
+        cs.endText();
+
+        y -= LINE_HEIGHT;
+        cs.beginText();
+        cs.newLineAtOffset(MARGIN, y);
+        cs.showText("Dette précédente: " + formatCurrency(fmt, previousDebt) + " DT");
+        cs.endText();
+
+        y -= LINE_HEIGHT;
+        cs.beginText();
+        cs.newLineAtOffset(MARGIN, y);
+        cs.showText("Dette restante: " + formatCurrency(fmt, newDebt) + " DT");
+        cs.endText();
+
+        // Processed by
+        y -= LINE_HEIGHT * 2;
+        cs.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 14);
+        cs.beginText();
+        cs.newLineAtOffset(MARGIN, y);
+        cs.showText("Traité par:");
+        cs.endText();
+
+        cs.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+        y -= LINE_HEIGHT;
+        cs.beginText();
+        cs.newLineAtOffset(MARGIN, y);
+        if (receipt.getUser() != null) {
+          cs.showText(receipt.getUser().getFirstName() + " " + receipt.getUser().getLastName());
+        } else {
+          cs.showText("N/A");
+        }
+        cs.endText();
+
+        // Footer
+        drawFooter(cs, java.time.LocalDateTime.now().format(DATE_FORMAT));
+      }
+
+      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+      doc.save(outputStream);
+      return outputStream.toByteArray();
+    }
   }
 
   private float drawTableHeader(PDPageContentStream contentStream, float yPosition)
@@ -234,13 +362,19 @@ public class PdfGenerationService {
       contentStream.showText(String.valueOf(line.getLineNumber()));
       contentStream.endText();
 
-      // Product name
-      String productName =
-          line.getProduct() != null
-              ? line.getProduct().getName()
-              : (line.getConditioningDescription() != null
-                  ? line.getConditioningDescription()
-                  : "N/A");
+      // Product name (append variant name when present)
+      String productName;
+      if (line.getProduct() != null) {
+        String name = line.getProduct().getName() != null ? line.getProduct().getName() : "";
+        productName =
+            name
+                + (line.getVariant() != null && line.getVariant().getVariantName() != null
+                    ? " - " + line.getVariant().getVariantName()
+                    : "");
+      } else {
+        productName =
+            line.getConditioningDescription() != null ? line.getConditioningDescription() : "N/A";
+      }
       contentStream.beginText();
       contentStream.newLineAtOffset(columnPositions[1], yPosition);
       contentStream.showText(truncateText(productName, 140));
@@ -293,7 +427,9 @@ public class PdfGenerationService {
     yPosition -= LINE_HEIGHT;
     contentStream.beginText();
     contentStream.newLineAtOffset(totalsX, yPosition);
-    BigDecimal vatPercentage = document.getVatRate().multiply(BigDecimal.valueOf(100));
+    BigDecimal vatRate = document.getVatRate();
+    // Centralized normalization (legacy fractional rates, default 19%)
+    BigDecimal vatPercentage = VatRates.normalize(vatRate);
     contentStream.showText(
         "TVA ("
             + vatPercentage
@@ -301,19 +437,13 @@ public class PdfGenerationService {
             + formatCurrency(getCurrencyFormat(), document.getTotalVat()));
     contentStream.endText();
 
-    // Transport fee (for BL and Invoice)
-    if (document.getDocumentType() == DocumentType.DELIVERY_NOTE
-        || document.getDocumentType() == DocumentType.INVOICE) {
+    // Transport fee (only for deliveries)
+    if (Boolean.TRUE.equals(document.getIsDelivery()) && document.getTransportFee() != null) {
       yPosition -= LINE_HEIGHT;
       contentStream.beginText();
       contentStream.newLineAtOffset(totalsX, yPosition);
       contentStream.showText(
-          "Frais Transport: "
-              + formatCurrency(
-                  getCurrencyFormat(),
-                  document.getTransportFee() != null
-                      ? document.getTransportFee()
-                      : BigDecimal.ZERO));
+          "Frais Transport: " + formatCurrency(getCurrencyFormat(), document.getTransportFee()));
       contentStream.endText();
     }
 
@@ -352,7 +482,7 @@ public class PdfGenerationService {
     return yPosition - LINE_HEIGHT * 2;
   }
 
-  private void drawFooter(PDPageContentStream contentStream, Document document) throws IOException {
+  private void drawFooter(PDPageContentStream contentStream, String timestamp) throws IOException {
     contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 8);
     float footerY = MARGIN;
 
@@ -364,8 +494,7 @@ public class PdfGenerationService {
     footerY -= LINE_HEIGHT;
     contentStream.beginText();
     contentStream.newLineAtOffset(MARGIN, footerY);
-    contentStream.showText(
-        "Document généré automatiquement - " + document.getDate().format(DATE_FORMAT));
+    contentStream.showText("Document généré automatiquement - " + timestamp);
     contentStream.endText();
   }
 

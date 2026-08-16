@@ -110,11 +110,17 @@ public class Document {
   @DecimalMin(value = "0.0", message = "Total including tax cannot be negative")
   private BigDecimal totalIncludingTax = BigDecimal.ZERO;
 
-  @Schema(description = "Transport fee for delivery notes", example = "10.00")
+  @Schema(
+      description = "Whether this document is a delivery (adds transport fee)",
+      example = "false")
+  @Column(name = "is_delivery", nullable = false)
+  @NotNull(message = "Delivery flag is required")
+  private Boolean isDelivery = false;
+
+  @Schema(description = "Transport fee for deliveries", example = "10.00")
   @Column(name = "transport_fee", precision = 19, scale = 3)
-  @NotNull(message = "Transport fee is required")
   @DecimalMin(value = "0.0", message = "Transport fee cannot be negative")
-  private BigDecimal transportFee = new BigDecimal("10.000"); // Default 10.000 DT for BL
+  private BigDecimal transportFee;
 
   @Schema(description = "Stamp duty for invoices", example = "1.00")
   @Column(name = "stamp_duty", precision = 19, scale = 3)

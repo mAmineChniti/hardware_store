@@ -3,17 +3,13 @@ package tn.inovexahub.hardware_store.entity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -90,10 +86,6 @@ public class Supplier {
       accessMode = Schema.AccessMode.READ_ONLY)
   @Column(name = "updated_at")
   private LocalDateTime updatedAt;
-
-  @Schema(description = "Product costs from this supplier")
-  @OneToMany(mappedBy = "supplier", fetch = FetchType.LAZY)
-  private List<ProductCost> productCosts = new ArrayList<>();
 
   @PrePersist
   protected void onCreate() {

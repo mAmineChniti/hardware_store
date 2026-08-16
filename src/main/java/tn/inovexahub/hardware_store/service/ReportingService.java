@@ -122,7 +122,7 @@ public class ReportingService {
     // Group by date in memory
     for (Document doc : documents) {
       LocalDate docDate = doc.getDate().toLocalDate();
-      if (!docDate.isBefore(startDate) && !docDate.isBefore(endDate.plusDays(1))) {
+      if (!docDate.isBefore(startDate) && docDate.isBefore(endDate.plusDays(1))) {
         dailyRevenue.merge(docDate, doc.getTotalIncludingTax(), BigDecimal::add);
       }
     }
@@ -557,8 +557,7 @@ public class ReportingService {
 
     // CSV Header
     writer.println(
-        "Reference,Name,Category,Unit Type,Stock Quantity,"
-            + "Average Purchase Price,Stock Value,Price On Site,Price Delivered");
+        "Reference,Name,Category,Unit Type,Stock Quantity," + "Average Purchase Price,Stock Value");
 
     // CSV Data
     for (Product product : allProducts) {
@@ -574,13 +573,7 @@ public class ReportingService {
               encodeCsvValue(product.getUnitType().toString()),
               encodeCsvValue(String.valueOf(product.getStockQuantity())),
               encodeCsvValue(product.getAveragePurchasePrice().toString()),
-              encodeCsvValue(stockValue.toString()),
-              encodeCsvValue(
-                  product.getPriceOnSite() != null ? product.getPriceOnSite().toString() : "0.0"),
-              encodeCsvValue(
-                  product.getPriceDelivered() != null
-                      ? product.getPriceDelivered().toString()
-                      : "0.0")));
+              encodeCsvValue(stockValue.toString())));
     }
 
     writer.flush();
@@ -608,8 +601,6 @@ public class ReportingService {
       headerRow.createCell(4).setCellValue("Stock Quantity");
       headerRow.createCell(5).setCellValue("Average Purchase Price");
       headerRow.createCell(6).setCellValue("Stock Value");
-      headerRow.createCell(7).setCellValue("Price On Site");
-      headerRow.createCell(8).setCellValue("Price Delivered");
 
       // Data Rows
       int rowNum = 1;
@@ -626,18 +617,10 @@ public class ReportingService {
         row.createCell(4).setCellValue(product.getStockQuantity().doubleValue());
         row.createCell(5).setCellValue(product.getAveragePurchasePrice().doubleValue());
         row.createCell(6).setCellValue(stockValue.doubleValue());
-        row.createCell(7)
-            .setCellValue(
-                product.getPriceOnSite() != null ? product.getPriceOnSite().doubleValue() : 0.0);
-        row.createCell(8)
-            .setCellValue(
-                product.getPriceDelivered() != null
-                    ? product.getPriceDelivered().doubleValue()
-                    : 0.0);
       }
 
       // Auto-size columns
-      for (int i = 0; i < 9; i++) {
+      for (int i = 0; i < 7; i++) {
         sheet.autoSizeColumn(i);
       }
 

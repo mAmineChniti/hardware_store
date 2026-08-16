@@ -1,7 +1,7 @@
 @startuml Diagramme de Classes - Magasin de Matériaux
 ' INOVEXAHUB - Système de Gestion Commerciale et Point de Vente (POS)
 ' Sprint 1: Modélisation UML
-' Version: 1.0 (MVP)
+' Version: 2.0 (LotsProduit, VarianteProduit, FraisLivraison)
 
 ' ============================================
 ' ÉNUMÉRATIONS
@@ -50,7 +50,7 @@ enum TypeTransaction {
 
 class Utilisateur {
   - Long id
-  - String prenom
+  - String prénom
   - String nom
   - String email
   - String motDePasse
@@ -106,12 +106,24 @@ class Produit {
   - String image
   - String catégorie
   - TypeUnité typeUnité
-  - Boolean estMatériauLourd
   - String unitéBase
   - BigDecimal quantitéStock
   - BigDecimal prixMoyenAchat
-  - BigDecimal prixSurPlace
-  - BigDecimal prixLivré
+  - BigDecimal prixUnitaire
+  - Fournisseur fournisseur
+  - LocalDateTime dateCréation
+  - LocalDateTime dateModification
+  + onCreate()
+  + onUpdate()
+}
+
+class VarianteProduit {
+  - Long id
+  - Long version
+  - Produit produit
+  - String sku
+  - String nomVariante
+  - String attributs
   - LocalDateTime dateCréation
   - LocalDateTime dateModification
   + onCreate()
@@ -130,15 +142,20 @@ class ConditionnementProduit {
   + onUpdate()
 }
 
-class CoûtProduit {
+class LotProduit {
   - Long id
+  - Long version
   - Produit produit
-  - Fournisseur fournisseur
+  - VarianteProduit variante
+  - BigDecimal quantité
   - BigDecimal coûtUnitaire
-  - LocalDate dateEffective
+  - BigDecimal prixUnitaire
+  - Fournisseur fournisseur
   - String notes
   - LocalDateTime dateCréation
+  - LocalDateTime dateModification
   + onCreate()
+  + onUpdate()
 }
 
 class Document {
@@ -154,6 +171,7 @@ class Document {
   - BigDecimal tauxTVA
   - BigDecimal totalTVA
   - BigDecimal totalTTC
+  - Boolean estLivraison
   - BigDecimal fraisTransport
   - BigDecimal droitTimbre
   - Boolean estVenteCrédit
@@ -170,7 +188,10 @@ class LigneDocument {
   - Integer numéroLigne
   - Document document
   - Produit produit
+  - VarianteProduit variante
   - String descriptionConditionnement
+  - BigDecimal quantitéParUnitéConditionnement
+  - String allocationsLots
   - BigDecimal quantité
   - BigDecimal prixUnitaire
   - BigDecimal coûtUnitaire
@@ -290,10 +311,14 @@ Client "1" -- "*" ReçuPaiement : effectue >
 Client "1" -- "*" HistoriqueCrédit : possède >
 
 Produit "1" -- "*" ConditionnementProduit : possède >
-Produit "1" -- "*" CoûtProduit : possède historique coûts >
+Produit "1" -- "*" VarianteProduit : possède variantes >
+Produit "1" -- "*" LotProduit : possède lots >
 Produit "0..1" -- "*" LigneDocument : apparaît dans >
 
-Fournisseur "0..1" -- "*" CoûtProduit : fournit coûts pour >
+VarianteProduit "1" -- "*" LotProduit : lots >
+VarianteProduit "0..1" -- "*" LigneDocument : apparaît dans >
+
+Fournisseur "0..1" -- "*" LotProduit : fournit lots >
 
 Document "1" -- "*" LigneDocument : contient >
 Document "0..1" -- "0..*" HistoriqueCrédit : génère (si vente crédit) >

@@ -1,9 +1,7 @@
 package tn.inovexahub.hardware_store.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
-import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
-import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.tags.Tag;
 import java.util.List;
@@ -22,15 +20,6 @@ public class OpenApiConfig {
             .bearerFormat("JWT")
             .description("JWT token for authentication");
 
-    Contact contact =
-        new Contact()
-            .name("INOVEXAHUB")
-            .email("contact@inovexahub.tn")
-            .url("https://inovexahub.tn");
-
-    License license =
-        new License().name("MIT License").url("https://choosealicense.com/licenses/mit/");
-
     Info info =
         new Info()
             .title("INOVEXAHUB Hardware Store API")
@@ -38,9 +27,7 @@ public class OpenApiConfig {
             .description(
                 "RESTful API for INOVEXAHUB Hardware Store POS System - "
                     + "A comprehensive point of sale system for Tunisian hardware stores "
-                    + "with multi-unit products, credit management, and fiscal compliance.")
-            .contact(contact)
-            .license(license);
+                    + "with multi-unit products, credit management, and fiscal compliance.");
 
     Tag authTag =
         new Tag()
@@ -58,7 +45,9 @@ public class OpenApiConfig {
     Tag productTag =
         new Tag()
             .name("Products")
-            .description("Product management including multi-unit conditioning and purchase costs");
+            .description(
+                "Product management including variants (multi-SKU with flexible JSON attributes), "
+                    + "multi-unit conditioning, and purchase costs");
     Tag reportingTag =
         new Tag()
             .name("Reporting")

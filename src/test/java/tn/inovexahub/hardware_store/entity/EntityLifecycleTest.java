@@ -2,8 +2,10 @@ package tn.inovexahub.hardware_store.entity;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
@@ -256,18 +258,6 @@ class EntityLifecycleTest {
     assertTrue(!token.getCreatedAt().isAfter(LocalDateTime.now().plusSeconds(1)));
   }
 
-  // ── ProductCost ────────────────────────────────────────────────────────
-
-  @Test
-  void productCost_onCreate_setsCreatedAt() throws Exception {
-    ProductCost cost = new ProductCost();
-
-    invokeMethod(cost, "onCreate");
-
-    assertNotNull(cost.getCreatedAt());
-    assertTrue(!cost.getCreatedAt().isAfter(LocalDateTime.now().plusSeconds(1)));
-  }
-
   // ── AuditLog ───────────────────────────────────────────────────────────
 
   @Test
@@ -347,6 +337,161 @@ class EntityLifecycleTest {
     assertTrue(
         conditioning.getUpdatedAt().isAfter(originalCreatedAt)
             || conditioning.getUpdatedAt().isEqual(originalCreatedAt));
+  }
+
+  // ── ProductVariant ───────────────────────────────────────────────────
+
+  @Test
+  void productVariant_onCreate_setsTimestamps() throws Exception {
+    ProductVariant variant = new ProductVariant();
+
+    invokeMethod(variant, "onCreate");
+
+    assertNotNull(variant.getCreatedAt());
+    assertNotNull(variant.getUpdatedAt());
+    assertTrue(!variant.getCreatedAt().isAfter(LocalDateTime.now().plusSeconds(1)));
+    assertTrue(!variant.getUpdatedAt().isAfter(LocalDateTime.now().plusSeconds(1)));
+  }
+
+  @Test
+  void productVariant_onUpdate_setsUpdatedAt() throws Exception {
+    ProductVariant variant = new ProductVariant();
+    invokeMethod(variant, "onCreate");
+    LocalDateTime originalCreatedAt = variant.getCreatedAt();
+
+    Thread.sleep(10);
+    invokeMethod(variant, "onUpdate");
+
+    assertNotNull(variant.getUpdatedAt());
+    assertTrue(
+        variant.getUpdatedAt().isAfter(originalCreatedAt)
+            || variant.getUpdatedAt().isEqual(originalCreatedAt));
+  }
+
+  // ── ProductBatch ──────────────────────────────────────────────────
+
+  @Test
+  void productBatch_onCreate_setsTimestamps() throws Exception {
+    ProductBatch batch = new ProductBatch();
+
+    invokeMethod(batch, "onCreate");
+
+    assertNotNull(batch.getCreatedAt());
+    assertNotNull(batch.getUpdatedAt());
+    assertTrue(!batch.getCreatedAt().isAfter(LocalDateTime.now().plusSeconds(1)));
+    assertTrue(!batch.getUpdatedAt().isAfter(LocalDateTime.now().plusSeconds(1)));
+  }
+
+  @Test
+  void productBatch_onUpdate_setsUpdatedAt() throws Exception {
+    ProductBatch batch = new ProductBatch();
+    invokeMethod(batch, "onCreate");
+    LocalDateTime originalCreatedAt = batch.getCreatedAt();
+
+    Thread.sleep(10);
+    invokeMethod(batch, "onUpdate");
+
+    assertNotNull(batch.getUpdatedAt());
+    assertTrue(
+        batch.getUpdatedAt().isAfter(originalCreatedAt)
+            || batch.getUpdatedAt().isEqual(originalCreatedAt));
+  }
+
+  @Test
+  void productBatch_onCreate_withoutVariant_succeeds() throws Exception {
+    ProductBatch batch = new ProductBatch();
+    Product product = new Product();
+    product.setId(1L);
+    batch.setProduct(product);
+
+    invokeMethod(batch, "onCreate");
+
+    assertNotNull(batch.getCreatedAt());
+    assertNotNull(batch.getUpdatedAt());
+  }
+
+  @Test
+  void productBatch_onCreate_withMismatchedVariant_throwsIllegalArgument() throws Exception {
+    Product product = new Product();
+    product.setId(1L);
+    Product otherProduct = new Product();
+    otherProduct.setId(2L);
+    ProductVariant variant = new ProductVariant();
+    variant.setProduct(otherProduct);
+
+    ProductBatch batch = new ProductBatch();
+    batch.setProduct(product);
+    batch.setVariant(variant);
+
+    InvocationTargetException ex =
+        assertThrows(InvocationTargetException.class, () -> invokeMethod(batch, "onCreate"));
+    assertTrue(ex.getCause() instanceof IllegalArgumentException);
+  }
+
+  @Test
+  void productBatch_onUpdate_withMismatchedVariant_throwsIllegalArgument() throws Exception {
+    Product product = new Product();
+    product.setId(1L);
+    Product otherProduct = new Product();
+    otherProduct.setId(2L);
+    ProductVariant variant = new ProductVariant();
+    variant.setProduct(otherProduct);
+
+    ProductBatch batch = new ProductBatch();
+    batch.setProduct(product);
+    batch.setVariant(variant);
+
+    InvocationTargetException ex =
+        assertThrows(InvocationTargetException.class, () -> invokeMethod(batch, "onUpdate"));
+    assertTrue(ex.getCause() instanceof IllegalArgumentException);
+  }
+
+  @Test
+  void productBatch_onCreate_derivesProductFromVariant() throws Exception {
+    Product product = new Product();
+    product.setId(1L);
+    ProductVariant variant = new ProductVariant();
+    variant.setProduct(product);
+
+    ProductBatch batch = new ProductBatch();
+    batch.setVariant(variant);
+
+    invokeMethod(batch, "onCreate");
+
+    assertEquals(product, batch.getProduct());
+    assertNotNull(batch.getCreatedAt());
+    assertNotNull(batch.getUpdatedAt());
+  }
+
+  @Test
+  void productBatch_onCreate_variantWithoutProduct_throwsIllegalArgument() throws Exception {
+    Product product = new Product();
+    product.setId(1L);
+    ProductVariant variant = new ProductVariant();
+
+    ProductBatch batch = new ProductBatch();
+    batch.setProduct(product);
+    batch.setVariant(variant);
+
+    InvocationTargetException ex =
+        assertThrows(InvocationTargetException.class, () -> invokeMethod(batch, "onCreate"));
+    assertTrue(ex.getCause() instanceof IllegalArgumentException);
+  }
+
+  @Test
+  void productBatch_onCreate_matchingVariantWithoutIds_succeeds() throws Exception {
+    Product product = new Product();
+    ProductVariant variant = new ProductVariant();
+    variant.setProduct(product);
+
+    ProductBatch batch = new ProductBatch();
+    batch.setProduct(product);
+    batch.setVariant(variant);
+
+    invokeMethod(batch, "onCreate");
+
+    assertNotNull(batch.getCreatedAt());
+    assertNotNull(batch.getUpdatedAt());
   }
 
   // helper — duplicated from Assertions to avoid wildcard import

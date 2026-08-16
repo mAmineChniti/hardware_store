@@ -13,7 +13,5 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long> {
 
   List<Supplier> findByDeletedFalse();
 
-  List<Supplier> findByNameContainingIgnoreCase(String name);
-
   List<Supplier> findByNameContainingIgnoreCaseAndDeletedFalse(String name);
 }

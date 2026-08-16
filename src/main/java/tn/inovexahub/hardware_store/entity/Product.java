@@ -1,5 +1,6 @@
 package tn.inovexahub.hardware_store.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -11,6 +12,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
@@ -26,15 +29,21 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import tn.inovexahub.hardware_store.enums.UnitType;
 
 /**
- * Product entity representing stock articles. Section 3: Product entity - unitType: determines if
- * quantity is integer (UNITARY) or decimal (WEIGHT, LENGTH, VOLUME) - isHeavyMaterial: enables dual
- * pricing grid (Sur Place / Livré) - stockQuantity: current physical stock (Double for simplicity
- * with validation flag)
+ * Product entity representing stock articles. Section 3: Product entity
+ *
+ * <p>unitType: Determines how quantity is measured and displayed: - UNITARY: Integer quantities
+ * (e.g., 5 pieces, 10 boxes) - WEIGHT: Decimal quantities in kilograms (e.g., 2.5 kg, 100.0 kg) -
+ * LENGTH: Decimal quantities in meters (e.g., 3.5 m, 10.0 m) - VOLUME: Decimal quantities in liters
+ * (e.g., 1.5 L, 20.0 L)
+ *
+ * <p>stockQuantity: Current physical stock (BigDecimal for precision, supports both integer and
+ * decimal quantities)
  */
 @Entity
 @Table(
@@ -90,11 +99,6 @@ public class Product {
   @NotNull(message = "Unit type is required")
   private UnitType unitType;
 
-  @Schema(description = "Whether product is heavy material", example = "false")
-  @Column(name = "is_heavy_material", nullable = false)
-  @NotNull(message = "Heavy material flag is required")
-  private Boolean isHeavyMaterial = false;
-
   @Schema(description = "Base unit", example = "piece")
   @Column(name = "base_unit", length = 20)
   private String baseUnit; // e.g., "m", "kg", "piece"
@@ -111,17 +115,18 @@ public class Product {
   @DecimalMin(value = "0.0", message = "Average purchase price cannot be negative")
   private BigDecimal averagePurchasePrice = BigDecimal.ZERO; // PAMP for margin calculation
 
-  @Schema(description = "Price on site (for heavy materials)", example = "35.00")
-  @Column(name = "price_on_site", precision = 19, scale = 3)
-  @DecimalMin(value = "0.0", message = "Price on site cannot be negative")
-  private BigDecimal
-      priceOnSite; // Prix de Vente Sur Place (nullable, used if isHeavyMaterial = true)
+  @Schema(description = "Unit selling price", example = "35.00")
+  @Column(name = "unit_price", precision = 19, scale = 3)
+  @DecimalMin(value = "0.0", message = "Unit price cannot be negative")
+  private BigDecimal unitPrice; // User-defined selling price
 
-  @Schema(description = "Price delivered (for heavy materials)", example = "40.00")
-  @Column(name = "price_delivered", precision = 19, scale = 3)
-  @DecimalMin(value = "0.0", message = "Price delivered cannot be negative")
-  private BigDecimal
-      priceDelivered; // Prix de Vente Livré (nullable, used if isHeavyMaterial = true)
+  @Schema(description = "Default/preferred supplier")
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "supplier_id")
+  @ToString.Exclude
+  @EqualsAndHashCode.Exclude
+  @com.fasterxml.jackson.annotation.JsonIgnore
+  private Supplier supplier;
 
   @Schema(
       description = "Product creation timestamp",
@@ -138,19 +143,21 @@ public class Product {
   private LocalDateTime updatedAt;
 
   @Schema(description = "Product conditionings")
-  @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+  @OneToMany(
+      mappedBy = "product",
+      cascade = CascadeType.ALL,
+      orphanRemoval = true,
+      fetch = FetchType.LAZY)
   @ToString.Exclude
+  @EqualsAndHashCode.Exclude
   private List<ProductConditioning> conditionings = new ArrayList<>();
 
   @Schema(description = "Document lines for this product")
   @OneToMany(mappedBy = "product", fetch = FetchType.LAZY)
+  @JsonIgnore
   @ToString.Exclude
+  @EqualsAndHashCode.Exclude
   private List<DocumentLine> documentLines = new ArrayList<>();
-
-  @Schema(description = "Product cost history")
-  @OneToMany(mappedBy = "product", fetch = FetchType.LAZY)
-  @ToString.Exclude
-  private List<ProductCost> costHistory = new ArrayList<>();
 
   @PrePersist
   protected void onCreate() {

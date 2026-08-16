@@ -24,6 +24,7 @@ import org.springframework.security.authentication.InsufficientAuthenticationExc
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 import tn.inovexahub.hardware_store.dto.ErrorResponse;
@@ -68,6 +69,50 @@ class GlobalExceptionHandlerTest {
     assertEquals(404, response.getBody().getStatus());
     assertEquals("Supplier Not Found", response.getBody().getError());
     assertEquals("Supplier not found", response.getBody().getMessage());
+    assertEquals("/api/test", response.getBody().getPath());
+  }
+
+  @Test
+  void handleProductNotFoundException() {
+    ProductNotFoundException ex = new ProductNotFoundException("Product not found");
+
+    ResponseEntity<ErrorResponse> response = handler.handleProductNotFoundException(ex, request);
+
+    assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+    assertNotNull(response.getBody());
+    assertEquals(404, response.getBody().getStatus());
+    assertEquals("Product Not Found", response.getBody().getError());
+    assertEquals("Product not found", response.getBody().getMessage());
+    assertEquals("/api/test", response.getBody().getPath());
+  }
+
+  @Test
+  void handleSkuAlreadyExistsException() {
+    SkuAlreadyExistsException ex = new SkuAlreadyExistsException("SCREW-6MM");
+
+    ResponseEntity<ErrorResponse> response = handler.handleSkuAlreadyExistsException(ex, request);
+
+    assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+    assertNotNull(response.getBody());
+    assertEquals(409, response.getBody().getStatus());
+    assertEquals("SKU Already Exists", response.getBody().getError());
+    assertEquals("SKU already exists: SCREW-6MM", response.getBody().getMessage());
+    assertEquals("/api/test", response.getBody().getPath());
+  }
+
+  @Test
+  void handleMissingServletRequestParameter() {
+    MissingServletRequestParameterException ex =
+        new MissingServletRequestParameterException("sku", "String");
+
+    ResponseEntity<ErrorResponse> response =
+        handler.handleMissingServletRequestParameter(ex, request);
+
+    assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+    assertNotNull(response.getBody());
+    assertEquals(400, response.getBody().getStatus());
+    assertEquals("Missing Parameter", response.getBody().getError());
+    assertEquals("Required parameter 'sku' is missing", response.getBody().getMessage());
     assertEquals("/api/test", response.getBody().getPath());
   }
 
@@ -336,6 +381,76 @@ class GlobalExceptionHandlerTest {
     assertNotNull(response.getBody());
     assertNotNull(response.getBody().getValidationErrors());
     assertTrue(response.getBody().getValidationErrors().isEmpty());
+  }
+
+  @Test
+  void handleProductVariantNotFoundException() {
+    ProductVariantNotFoundException ex = new ProductVariantNotFoundException("Variant not found");
+
+    ResponseEntity<ErrorResponse> response =
+        handler.handleProductVariantNotFoundException(ex, request);
+
+    assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+    assertNotNull(response.getBody());
+    assertEquals(404, response.getBody().getStatus());
+    assertEquals("Variant Not Found", response.getBody().getError());
+    assertEquals("Variant not found", response.getBody().getMessage());
+    assertEquals("/api/test", response.getBody().getPath());
+  }
+
+  @Test
+  void handleProductVariantNotFoundException_WithId() {
+    ProductVariantNotFoundException ex = new ProductVariantNotFoundException(42L);
+
+    ResponseEntity<ErrorResponse> response =
+        handler.handleProductVariantNotFoundException(ex, request);
+
+    assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+    assertNotNull(response.getBody());
+    assertEquals("Variant not found with id: 42", response.getBody().getMessage());
+  }
+
+  @Test
+  void handleProductBatchNotFoundException() {
+    ProductBatchNotFoundException ex = new ProductBatchNotFoundException("Batch not found");
+
+    ResponseEntity<ErrorResponse> response =
+        handler.handleProductBatchNotFoundException(ex, request);
+
+    assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+    assertNotNull(response.getBody());
+    assertEquals(404, response.getBody().getStatus());
+    assertEquals("Product Batch Not Found", response.getBody().getError());
+    assertEquals("Batch not found", response.getBody().getMessage());
+    assertEquals("/api/test", response.getBody().getPath());
+  }
+
+  @Test
+  void handleProductBatchNotFoundException_WithId() {
+    ProductBatchNotFoundException ex = new ProductBatchNotFoundException(42L);
+
+    ResponseEntity<ErrorResponse> response =
+        handler.handleProductBatchNotFoundException(ex, request);
+
+    assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+    assertNotNull(response.getBody());
+    assertEquals("Product batch not found with id: 42", response.getBody().getMessage());
+  }
+
+  @Test
+  void handleMissingRequestValue() {
+    org.springframework.web.server.MissingRequestValueException ex =
+        new org.springframework.web.server.MissingRequestValueException(
+            "id", String.class, "Required parameter 'id' is missing", null);
+
+    ResponseEntity<ErrorResponse> response = handler.handleMissingRequestValue(ex, request);
+
+    assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+    assertNotNull(response.getBody());
+    assertEquals(400, response.getBody().getStatus());
+    assertEquals("Missing Value", response.getBody().getError());
+    assertEquals("A required request value is missing", response.getBody().getMessage());
+    assertEquals("/api/test", response.getBody().getPath());
   }
 
   private jakarta.validation.Path mockValidationPath(String name) {

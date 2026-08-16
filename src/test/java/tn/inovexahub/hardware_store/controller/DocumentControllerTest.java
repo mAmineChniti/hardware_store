@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -25,20 +26,26 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.server.ResponseStatusException;
+import tn.inovexahub.hardware_store.dto.AddDocumentLineRequest;
 import tn.inovexahub.hardware_store.entity.Document;
 import tn.inovexahub.hardware_store.entity.DocumentLine;
 import tn.inovexahub.hardware_store.entity.Product;
+import tn.inovexahub.hardware_store.entity.ProductVariant;
 import tn.inovexahub.hardware_store.enums.DocumentStatus;
 import tn.inovexahub.hardware_store.enums.DocumentType;
+import tn.inovexahub.hardware_store.exception.ProductNotFoundException;
+import tn.inovexahub.hardware_store.exception.ProductVariantNotFoundException;
 import tn.inovexahub.hardware_store.service.DocumentService;
 import tn.inovexahub.hardware_store.service.PdfGenerationService;
 import tn.inovexahub.hardware_store.service.ProductService;
+import tn.inovexahub.hardware_store.service.ProductVariantService;
 
 @ExtendWith(MockitoExtension.class)
 class DocumentControllerTest {
 
   @Mock private DocumentService documentService;
   @Mock private ProductService productService;
+  @Mock private ProductVariantService productVariantService;
   @Mock private PdfGenerationService pdfGenerationService;
 
   private DocumentController documentController;
@@ -46,7 +53,8 @@ class DocumentControllerTest {
   @BeforeEach
   void setUp() {
     documentController =
-        new DocumentController(documentService, productService, pdfGenerationService);
+        new DocumentController(
+            documentService, productService, productVariantService, pdfGenerationService);
   }
 
   private Document createDocument(
@@ -64,6 +72,7 @@ class DocumentControllerTest {
     doc.setTransportFee(new BigDecimal("10.000"));
     doc.setStampDuty(new BigDecimal("1.000"));
     doc.setIsCreditSale(false);
+    doc.setIsDelivery(true);
     return doc;
   }
 
@@ -84,7 +93,6 @@ class DocumentControllerTest {
     product.setId(id);
     product.setName(name);
     product.setReference("REF-" + id);
-    product.setIsHeavyMaterial(false);
     product.setAveragePurchasePrice(new BigDecimal("15.000"));
     product.setStockQuantity(new BigDecimal("100.000"));
     return product;
@@ -250,29 +258,79 @@ class DocumentControllerTest {
 
     when(productService.getProductById(10L)).thenReturn(Optional.of(product));
     when(documentService.addDocumentLine(
-            eq(1L), eq(product), eq(new BigDecimal("5")), any(), any(), any(), any()))
+            eq(1L), eq(product), isNull(), eq(new BigDecimal("5")), any(), any(), any(), any()))
         .thenReturn(savedLine);
 
-    ResponseEntity<DocumentLine> response =
-        documentController.addDocumentLine(
-            1L, 10L, new BigDecimal("5"), new BigDecimal("20.000"), "Box", true, null);
+    AddDocumentLineRequest request = new AddDocumentLineRequest();
+    request.setProductId(10L);
+    request.setQuantity(new BigDecimal("5"));
+    request.setUnitPrice(new BigDecimal("20.000"));
+    request.setConditioningDescription("Box");
+    request.setIsDelivered(true);
+
+    ResponseEntity<DocumentLine> response = documentController.addDocumentLine(1L, request);
 
     assertEquals(HttpStatus.CREATED, response.getStatusCode());
     assertEquals("Hammer", response.getBody().getProduct().getName());
   }
 
   @Test
-  void addDocumentLine_ProductNotFound_ThrowsBadRequest() {
+  void addDocumentLine_WithVariant_ReturnsCreated() {
+    Product product = createProduct(10L, "Hammer");
+    ProductVariant variant = new ProductVariant();
+    variant.setId(5L);
+    variant.setProduct(product);
+    variant.setSku("HAMMER-500G");
+    variant.setVariantName("500g");
+    DocumentLine savedLine = createDocumentLine(1L, 1);
+    savedLine.setProduct(product);
+    savedLine.setVariant(variant);
+
+    when(productService.getProductById(10L)).thenReturn(Optional.of(product));
+    when(productVariantService.getVariantById(5L)).thenReturn(Optional.of(variant));
+    when(documentService.addDocumentLine(
+            eq(1L), eq(product), eq(variant), eq(new BigDecimal("5")), any(), any(), any(), any()))
+        .thenReturn(savedLine);
+
+    AddDocumentLineRequest request = new AddDocumentLineRequest();
+    request.setProductId(10L);
+    request.setQuantity(new BigDecimal("5"));
+    request.setUnitPrice(new BigDecimal("20.000"));
+    request.setConditioningDescription("Box");
+    request.setIsDelivered(true);
+    request.setVariantId(5L);
+
+    ResponseEntity<DocumentLine> response = documentController.addDocumentLine(1L, request);
+
+    assertEquals(HttpStatus.CREATED, response.getStatusCode());
+    assertEquals("500g", response.getBody().getVariant().getVariantName());
+  }
+
+  @Test
+  void addDocumentLine_VariantNotFound_ThrowsVariantNotFound() {
+    when(productService.getProductById(10L)).thenReturn(Optional.of(createProduct(10L, "Hammer")));
+    when(productVariantService.getVariantById(999L)).thenReturn(Optional.empty());
+
+    AddDocumentLineRequest request = new AddDocumentLineRequest();
+    request.setProductId(10L);
+    request.setQuantity(new BigDecimal("5"));
+    request.setVariantId(999L);
+
+    assertThrows(
+        ProductVariantNotFoundException.class,
+        () -> documentController.addDocumentLine(1L, request));
+  }
+
+  @Test
+  void addDocumentLine_ProductNotFound_ThrowsProductNotFound() {
     when(productService.getProductById(999L)).thenReturn(Optional.empty());
 
-    ResponseStatusException ex =
-        assertThrows(
-            ResponseStatusException.class,
-            () ->
-                documentController.addDocumentLine(
-                    1L, 999L, new BigDecimal("5"), new BigDecimal("20.000"), null, null, null));
+    AddDocumentLineRequest request = new AddDocumentLineRequest();
+    request.setProductId(999L);
+    request.setQuantity(new BigDecimal("5"));
 
-    assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+    assertThrows(
+        ProductNotFoundException.class, () -> documentController.addDocumentLine(1L, request));
   }
 
   @Test
@@ -280,15 +338,16 @@ class DocumentControllerTest {
     Product product = createProduct(10L, "Hammer");
     when(productService.getProductById(10L)).thenReturn(Optional.of(product));
     when(documentService.addDocumentLine(
-            eq(1L), eq(product), eq(new BigDecimal("5")), any(), any(), any(), any()))
+            eq(1L), eq(product), isNull(), eq(new BigDecimal("5")), any(), any(), any(), any()))
         .thenThrow(new RuntimeException("Only DRAFT documents can have lines added"));
+
+    AddDocumentLineRequest request = new AddDocumentLineRequest();
+    request.setProductId(10L);
+    request.setQuantity(new BigDecimal("5"));
 
     ResponseStatusException ex =
         assertThrows(
-            ResponseStatusException.class,
-            () ->
-                documentController.addDocumentLine(
-                    1L, 10L, new BigDecimal("5"), new BigDecimal("20.000"), null, null, null));
+            ResponseStatusException.class, () -> documentController.addDocumentLine(1L, request));
 
     assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
     assertEquals("Only DRAFT documents can have lines added", ex.getReason());
@@ -566,5 +625,158 @@ class DocumentControllerTest {
 
     assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, ex.getStatusCode());
     assertEquals("Failed to generate PDF", ex.getReason());
+  }
+
+  // ==================== Additional coverage tests ====================
+
+  @Test
+  void addDocumentLine_WithConditioningId_ReturnsCreated() {
+    Product product = createProduct(10L, "Hammer");
+    DocumentLine savedLine = createDocumentLine(1L, 1);
+    savedLine.setProduct(product);
+
+    when(productService.getProductById(10L)).thenReturn(Optional.of(product));
+    when(documentService.addDocumentLine(
+            eq(1L), eq(product), isNull(), eq(new BigDecimal("5")), any(), any(), any(), eq(3L)))
+        .thenReturn(savedLine);
+
+    AddDocumentLineRequest request = new AddDocumentLineRequest();
+    request.setProductId(10L);
+    request.setQuantity(new BigDecimal("5"));
+    request.setUnitPrice(new BigDecimal("20.000"));
+    request.setConditioningDescription("Box");
+    request.setIsDelivered(true);
+    request.setConditioningId(3L);
+
+    ResponseEntity<DocumentLine> response = documentController.addDocumentLine(1L, request);
+
+    assertEquals(HttpStatus.CREATED, response.getStatusCode());
+  }
+
+  @Test
+  void addDocumentLine_NullIsDelivered_PassesNullToService() {
+    Product product = createProduct(10L, "Hammer");
+    DocumentLine savedLine = createDocumentLine(1L, 1);
+    savedLine.setProduct(product);
+    savedLine.setIsDelivered(false);
+
+    when(productService.getProductById(10L)).thenReturn(Optional.of(product));
+    when(documentService.addDocumentLine(
+            eq(1L),
+            eq(product),
+            isNull(),
+            eq(new BigDecimal("5")),
+            any(),
+            any(),
+            isNull(),
+            isNull()))
+        .thenReturn(savedLine);
+
+    AddDocumentLineRequest request = new AddDocumentLineRequest();
+    request.setProductId(10L);
+    request.setQuantity(new BigDecimal("5"));
+    request.setUnitPrice(new BigDecimal("20.000"));
+
+    ResponseEntity<DocumentLine> response = documentController.addDocumentLine(1L, request);
+
+    assertEquals(HttpStatus.CREATED, response.getStatusCode());
+  }
+
+  @Test
+  void addDocumentLine_VariantFromDifferentProduct_ThrowsIllegalArgument() {
+    Product product = createProduct(10L, "Hammer");
+    Product otherProduct = createProduct(20L, "Saw");
+    ProductVariant variant = new ProductVariant();
+    variant.setId(5L);
+    variant.setProduct(otherProduct);
+
+    when(productService.getProductById(10L)).thenReturn(Optional.of(product));
+    when(productVariantService.getVariantById(5L)).thenReturn(Optional.of(variant));
+
+    AddDocumentLineRequest request = new AddDocumentLineRequest();
+    request.setProductId(10L);
+    request.setQuantity(new BigDecimal("5"));
+    request.setVariantId(5L);
+
+    assertThrows(
+        IllegalArgumentException.class, () -> documentController.addDocumentLine(1L, request));
+  }
+
+  @Test
+  void addDocumentLine_VariantWithNullProduct_ThrowsIllegalArgument() {
+    Product product = createProduct(10L, "Hammer");
+    ProductVariant variant = new ProductVariant();
+    variant.setId(5L);
+
+    when(productService.getProductById(10L)).thenReturn(Optional.of(product));
+    when(productVariantService.getVariantById(5L)).thenReturn(Optional.of(variant));
+
+    AddDocumentLineRequest request = new AddDocumentLineRequest();
+    request.setProductId(10L);
+    request.setQuantity(new BigDecimal("5"));
+    request.setVariantId(5L);
+
+    assertThrows(
+        IllegalArgumentException.class, () -> documentController.addDocumentLine(1L, request));
+  }
+
+  @Test
+  void updateDocument_ResponseStatusException_PropagatesException() {
+    Document details = createDocument(null, null, DocumentType.QUOTE, DocumentStatus.DRAFT);
+    when(documentService.updateDocument(eq(1L), any(Document.class)))
+        .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Document locked"));
+
+    ResponseStatusException ex =
+        assertThrows(
+            ResponseStatusException.class, () -> documentController.updateDocument(1L, details));
+
+    assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
+  }
+
+  @Test
+  void validateDocument_ResponseStatusException_PropagatesException() {
+    when(documentService.validateDocument(1L))
+        .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Document locked"));
+
+    ResponseStatusException ex =
+        assertThrows(ResponseStatusException.class, () -> documentController.validateDocument(1L));
+
+    assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
+  }
+
+  @Test
+  void cancelDocument_ResponseStatusException_PropagatesException() {
+    when(documentService.cancelDocument(1L))
+        .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Document locked"));
+
+    ResponseStatusException ex =
+        assertThrows(ResponseStatusException.class, () -> documentController.cancelDocument(1L));
+
+    assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
+  }
+
+  @Test
+  void convertQuoteToDeliveryNote_ResponseStatusException_PropagatesException() {
+    when(documentService.convertQuoteToDeliveryNote(1L))
+        .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Document locked"));
+
+    ResponseStatusException ex =
+        assertThrows(
+            ResponseStatusException.class, () -> documentController.convertQuoteToDeliveryNote(1L));
+
+    assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
+  }
+
+  @Test
+  void convertDeliveryNoteToInvoice_ResponseStatusException_PropagatesException() {
+    when(documentService.convertDeliveryNoteToInvoice(2L))
+        .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Document locked"));
+
+    ResponseStatusException ex =
+        assertThrows(
+            ResponseStatusException.class,
+            () -> documentController.convertDeliveryNoteToInvoice(2L));
+
+    assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
   }
 }

@@ -1,7 +1,7 @@
 @startuml Hardware Store Class Diagram
 ' INOVEXAHUB - Système de Gestion Commerciale et Point de Vente (POS)
 ' Sprint 1: Modélisation UML
-' Version: 1.0 (MVP)
+' Version: 2.0 (ProductBatch, ProductVariant, Delivery Fee)
 
 ' ============================================
 ' ENUMS
@@ -106,12 +106,24 @@ class Product {
   - String image
   - String category
   - UnitType unitType
-  - Boolean isHeavyMaterial
   - String baseUnit
   - BigDecimal stockQuantity
   - BigDecimal averagePurchasePrice
-  - BigDecimal priceOnSite
-  - BigDecimal priceDelivered
+  - BigDecimal unitPrice
+  - Supplier supplier
+  - LocalDateTime createdAt
+  - LocalDateTime updatedAt
+  + onCreate()
+  + onUpdate()
+}
+
+class ProductVariant {
+  - Long id
+  - Long version
+  - Product product
+  - String sku
+  - String variantName
+  - String attributes
   - LocalDateTime createdAt
   - LocalDateTime updatedAt
   + onCreate()
@@ -130,15 +142,20 @@ class ProductConditioning {
   + onUpdate()
 }
 
-class ProductCost {
+class ProductBatch {
   - Long id
+  - Long version
   - Product product
-  - Supplier supplier
+  - ProductVariant variant
+  - BigDecimal quantity
   - BigDecimal unitCost
-  - LocalDate effectiveDate
+  - BigDecimal unitPrice
+  - Supplier supplier
   - String notes
   - LocalDateTime createdAt
+  - LocalDateTime updatedAt
   + onCreate()
+  + onUpdate()
 }
 
 class Document {
@@ -154,6 +171,7 @@ class Document {
   - BigDecimal vatRate
   - BigDecimal totalVat
   - BigDecimal totalIncludingTax
+  - Boolean isDelivery
   - BigDecimal transportFee
   - BigDecimal stampDuty
   - Boolean isCreditSale
@@ -170,7 +188,10 @@ class DocumentLine {
   - Integer lineNumber
   - Document document
   - Product product
+  - ProductVariant variant
   - String conditioningDescription
+  - BigDecimal conditioningQuantityPerUnit
+  - String batchAllocations
   - BigDecimal quantity
   - BigDecimal unitPrice
   - BigDecimal unitCost
@@ -289,10 +310,14 @@ Client "1" -- "*" PaymentReceipt : makes >
 Client "1" -- "*" CreditHistory : has >
 
 Product "1" -- "*" ProductConditioning : has >
-Product "1" -- "*" ProductCost : has cost history >
+Product "1" -- "*" ProductVariant : has variants >
+Product "1" -- "*" ProductBatch : has batches >
 Product "0..1" -- "*" DocumentLine : appears in >
 
-Supplier "0..1" -- "*" ProductCost : provides costs for >
+ProductVariant "1" -- "*" ProductBatch : batches >
+ProductVariant "0..1" -- "*" DocumentLine : appears in >
+
+Supplier "0..1" -- "*" ProductBatch : supplies batches >
 
 Document "1" -- "*" DocumentLine : contains >
 Document "0..1" -- "0..*" CreditHistory : generates (if credit sale) >

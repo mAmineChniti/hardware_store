@@ -268,6 +268,33 @@ class ClientServiceTest {
   }
 
   @Test
+  void processPayment_NullAmount_ThrowsInvalidPaymentException() {
+    User testUser = new User();
+    testUser.setId(1L);
+
+    assertThrows(
+        InvalidPaymentException.class,
+        () -> clientService.processPayment(testClient, null, PaymentMethod.CASH, testUser));
+  }
+
+  @Test
+  void processPayment_ZeroOrNegativeAmount_ThrowsInvalidPaymentException() {
+    User testUser = new User();
+    testUser.setId(1L);
+
+    assertThrows(
+        InvalidPaymentException.class,
+        () ->
+            clientService.processPayment(
+                testClient, BigDecimal.ZERO, PaymentMethod.CASH, testUser));
+    assertThrows(
+        InvalidPaymentException.class,
+        () ->
+            clientService.processPayment(
+                testClient, new BigDecimal("-50.00"), PaymentMethod.CASH, testUser));
+  }
+
+  @Test
   void processPayment_PartialPayment_HappyPath() {
     testClient.setCurrentDebt(new BigDecimal("5000.00"));
 
@@ -484,5 +511,30 @@ class ClientServiceTest {
     assertEquals(1, activeHistory.size());
     assertEquals(new BigDecimal("500.00"), activeHistory.get(0).getAmount());
     verify(creditHistoryRepository).findActiveCreditHistoryByClient(1L);
+  }
+
+  // ==================== getClientPaymentReceiptById ====================
+
+  @Test
+  void getClientPaymentReceiptById_ReturnsReceipt() {
+    PaymentReceipt receipt = new PaymentReceipt();
+    receipt.setId(10L);
+    receipt.setClient(testClient);
+
+    when(paymentReceiptRepository.findByIdAndClientId(10L, 1L)).thenReturn(Optional.of(receipt));
+
+    Optional<PaymentReceipt> result = clientService.getClientPaymentReceiptById(1L, 10L);
+
+    assertTrue(result.isPresent());
+    assertEquals(10L, result.get().getId());
+  }
+
+  @Test
+  void getClientPaymentReceiptById_NotFound_ReturnsEmpty() {
+    when(paymentReceiptRepository.findByIdAndClientId(99L, 1L)).thenReturn(Optional.empty());
+
+    Optional<PaymentReceipt> result = clientService.getClientPaymentReceiptById(1L, 99L);
+
+    assertTrue(result.isEmpty());
   }
 }

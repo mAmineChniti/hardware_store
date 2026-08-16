@@ -1,7 +1,7 @@
 @startuml Hardware Store Database Schema
 ' INOVEXAHUB - Système de Gestion Commerciale et Point de Vente (POS)
 ' Sprint 1: Modélisation UML - Database Schema
-' Version: 1.0 (MVP)
+' Version: 2.0 (ProductBatch, ProductVariant, Delivery Fee)
 ' Database: PostgreSQL
 
 skinparam linetype ortho
@@ -65,12 +65,22 @@ entity products {
   image TEXT
   category VARCHAR(50)
   unit_type VARCHAR(20)
-  is_heavy_material BOOLEAN
   base_unit VARCHAR(20)
   stock_quantity DECIMAL(19,3)
   average_purchase_price DECIMAL(19,3)
-  price_on_site DECIMAL(19,3)
-  price_delivered DECIMAL(19,3)
+  unit_price DECIMAL(19,3)
+  supplier_id BIGINT FK
+  created_at TIMESTAMP
+  updated_at TIMESTAMP
+}
+
+entity product_variants {
+  id BIGSERIAL PK
+  version BIGINT
+  product_id BIGINT FK
+  sku VARCHAR(50) UNIQUE
+  variant_name VARCHAR(100)
+  attributes TEXT
   created_at TIMESTAMP
   updated_at TIMESTAMP
 }
@@ -85,14 +95,18 @@ entity product_conditionings {
   updated_at TIMESTAMP
 }
 
-entity product_costs {
+entity product_batches {
   id BIGSERIAL PK
+  version BIGINT
   product_id BIGINT FK
-  supplier_id BIGINT FK
+  variant_id BIGINT FK
+  quantity DECIMAL(19,3)
   unit_cost DECIMAL(19,3)
-  effective_date DATE
+  unit_price DECIMAL(19,3)
+  supplier_id BIGINT FK
   notes VARCHAR(500)
   created_at TIMESTAMP
+  updated_at TIMESTAMP
 }
 
 entity documents {
@@ -108,6 +122,7 @@ entity documents {
   vat_rate DECIMAL(5,2)
   total_vat DECIMAL(19,3)
   total_including_tax DECIMAL(19,3)
+  is_delivery BOOLEAN
   transport_fee DECIMAL(19,3)
   stamp_duty DECIMAL(19,3)
   is_credit_sale BOOLEAN
@@ -121,8 +136,11 @@ entity document_lines {
   id BIGSERIAL PK
   document_id BIGINT FK
   product_id BIGINT FK
+  variant_id BIGINT FK
   line_number INTEGER
   conditioning_description VARCHAR(100)
+  conditioning_quantity_per_unit DECIMAL(19,3)
+  batch_allocations TEXT
   quantity DECIMAL(19,3)
   unit_price DECIMAL(19,3)
   unit_cost DECIMAL(19,3)
@@ -216,13 +234,17 @@ end note
 ' FOREIGN KEY RELATIONSHIPS
 ' ============================================
 
+products }o--o| suppliers : "supplier_id"
+product_variants }o--|| products : "product_id"
 product_conditionings }o--|| products : "product_id"
-product_costs }o--|| products : "product_id"
-product_costs }o--o| suppliers : "supplier_id"
+product_batches }o--|| products : "product_id"
+product_batches }o--o| product_variants : "variant_id"
+product_batches }o--o| suppliers : "supplier_id"
 documents }o--o| clients : "client_id"
 documents }o--o| users : "user_id"
 document_lines }o--|| documents : "document_id"
 document_lines }o--o| products : "product_id"
+document_lines }o--o| product_variants : "variant_id"
 payment_receipts }o--|| clients : "client_id"
 payment_receipts }o--o| users : "user_id"
 credit_history }o--|| clients : "client_id"
@@ -239,20 +261,27 @@ password_reset_tokens }o--|| users : "user_id"
 note right of products
   - reference indexed for fast POS scanning (< 500ms)
   - Supports decimal quantities for WEIGHT, LENGTH, VOLUME
-  - Double pricing for heavy materials (Sur Place / Livré)
   - image stored as base64 encoded string
+  - unit_price: default selling price
 end note
 
-note right of product_costs
-  - Date-based unit cost history
-  - Tracks cost fluctuations over time
-  - Enables accurate margin calculations
-  - Multiple suppliers per product
+note right of product_variants
+  - Multi-SKU variants with flexible JSON attributes
+  - Supports caliber, material, color, etc.
+  - sku: unique stock-keeping unit identifier
+end note
+
+note right of product_batches
+  - FIFO inventory tracking per batch
+  - Tracks unit_cost (purchase) and unit_price (selling)
+  - Optional variant_id for variant-level batches
+  - Composite indexes for efficient FIFO allocation
 end note
 
 note right of documents
   - SINGLE_TABLE inheritance: QUOTE, DELIVERY_NOTE, INVOICE
-  - transport_fee default: 10.000 DT (BL)
+  - is_delivery: controls transport fee application
+  - transport_fee: nullable, only set when is_delivery = TRUE
   - stamp_duty default: 1.000 DT (INVOICE)
   - vat_rate default: 19.00%
 end note

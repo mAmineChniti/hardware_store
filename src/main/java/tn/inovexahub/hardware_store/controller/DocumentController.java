@@ -11,7 +11,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -25,17 +24,21 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import tn.inovexahub.hardware_store.dto.AddDocumentLineRequest;
 import tn.inovexahub.hardware_store.entity.Document;
 import tn.inovexahub.hardware_store.entity.DocumentLine;
 import tn.inovexahub.hardware_store.entity.Product;
+import tn.inovexahub.hardware_store.entity.ProductVariant;
 import tn.inovexahub.hardware_store.enums.DocumentStatus;
 import tn.inovexahub.hardware_store.enums.DocumentType;
+import tn.inovexahub.hardware_store.exception.ProductNotFoundException;
+import tn.inovexahub.hardware_store.exception.ProductVariantNotFoundException;
 import tn.inovexahub.hardware_store.service.DocumentService;
 import tn.inovexahub.hardware_store.service.PdfGenerationService;
 import tn.inovexahub.hardware_store.service.ProductService;
+import tn.inovexahub.hardware_store.service.ProductVariantService;
 
 @RestController
 @RequestMapping("/api/documents")
@@ -47,14 +50,17 @@ public class DocumentController {
 
   private final DocumentService documentService;
   private final ProductService productService;
+  private final ProductVariantService productVariantService;
   private final PdfGenerationService pdfGenerationService;
 
   public DocumentController(
       DocumentService documentService,
       ProductService productService,
+      ProductVariantService productVariantService,
       PdfGenerationService pdfGenerationService) {
     this.documentService = documentService;
     this.productService = productService;
+    this.productVariantService = productVariantService;
     this.pdfGenerationService = pdfGenerationService;
   }
 
@@ -197,6 +203,8 @@ public class DocumentController {
     try {
       Document updatedDocument = documentService.updateDocument(id, documentDetails);
       return ResponseEntity.ok(updatedDocument);
+    } catch (ResponseStatusException e) {
+      throw e;
     } catch (RuntimeException e) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
     }
@@ -267,49 +275,60 @@ public class DocumentController {
                     schema = @Schema(implementation = DocumentLine.class))),
         @ApiResponse(
             responseCode = "400",
-            description = "Invalid line item details or missing product",
+            description = "Invalid line item details or variant mismatch",
             content = @Content),
         @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
         @ApiResponse(
             responseCode = "403",
             description = "Forbidden - insufficient role privileges",
+            content = @Content),
+        @ApiResponse(
+            responseCode = "404",
+            description = "Product or variant not found",
             content = @Content)
       })
   public ResponseEntity<DocumentLine> addDocumentLine(
       @Parameter(description = "Document ID", example = "1", required = true) @PathVariable Long id,
-      @Parameter(description = "Product ID", example = "10", required = true) @RequestParam
-          Long productId,
-      @Parameter(description = "Line item quantity", example = "5.0", required = true) @RequestParam
-          BigDecimal quantity,
-      @Parameter(description = "Custom unit price (optional)", example = "15.500")
-          @RequestParam(required = false)
-          BigDecimal unitPrice,
-      @Parameter(description = "Conditioning unit description (optional)", example = "Boîte de 10")
-          @RequestParam(required = false)
-          String conditioningDescription,
-      @Parameter(description = "Delivered status (optional)", example = "true")
-          @RequestParam(required = false)
-          Boolean isDelivered,
-      @Parameter(description = "Product conditioning ID (optional)", example = "2")
-          @RequestParam(required = false)
-          Long conditioningId) {
+      @RequestBody(description = "Line item details", required = true)
+          @Valid
+          @org.springframework.web.bind.annotation.RequestBody
+          AddDocumentLineRequest lineRequest) {
+
+    Product product =
+        productService
+            .getProductById(lineRequest.getProductId())
+            .orElseThrow(() -> new ProductNotFoundException(lineRequest.getProductId()));
+
+    ProductVariant variant = null;
+    if (lineRequest.getVariantId() != null) {
+      variant =
+          productVariantService
+              .getVariantById(lineRequest.getVariantId())
+              .orElseThrow(() -> new ProductVariantNotFoundException(lineRequest.getVariantId()));
+      if (variant.getProduct() == null
+          || !lineRequest.getProductId().equals(variant.getProduct().getId())) {
+        throw new IllegalArgumentException(
+            "Variant "
+                + lineRequest.getVariantId()
+                + " does not belong to product "
+                + lineRequest.getProductId());
+      }
+    }
 
     try {
-      Product product =
-          productService
-              .getProductById(productId)
-              .orElseThrow(() -> new RuntimeException("Product not found"));
-
       DocumentLine line =
           documentService.addDocumentLine(
               id,
               product,
-              quantity,
-              unitPrice,
-              conditioningDescription,
-              isDelivered,
-              conditioningId);
+              variant,
+              lineRequest.getQuantity(),
+              lineRequest.getUnitPrice(),
+              lineRequest.getConditioningDescription(),
+              lineRequest.getIsDelivered(),
+              lineRequest.getConditioningId());
       return ResponseEntity.status(HttpStatus.CREATED).body(line);
+    } catch (ResponseStatusException e) {
+      throw e;
     } catch (RuntimeException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
     }
@@ -420,6 +439,8 @@ public class DocumentController {
     try {
       Document validatedDocument = documentService.validateDocument(id);
       return ResponseEntity.ok(validatedDocument);
+    } catch (ResponseStatusException e) {
+      throw e;
     } catch (RuntimeException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
     }
@@ -457,6 +478,8 @@ public class DocumentController {
     try {
       Document cancelledDocument = documentService.cancelDocument(id);
       return ResponseEntity.ok(cancelledDocument);
+    } catch (ResponseStatusException e) {
+      throw e;
     } catch (RuntimeException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
     }
@@ -492,6 +515,8 @@ public class DocumentController {
     try {
       Document bl = documentService.convertQuoteToDeliveryNote(id);
       return ResponseEntity.status(HttpStatus.CREATED).body(bl);
+    } catch (ResponseStatusException e) {
+      throw e;
     } catch (RuntimeException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
     }
@@ -528,6 +553,8 @@ public class DocumentController {
     try {
       Document invoice = documentService.convertDeliveryNoteToInvoice(id);
       return ResponseEntity.status(HttpStatus.CREATED).body(invoice);
+    } catch (ResponseStatusException e) {
+      throw e;
     } catch (RuntimeException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
     }
@@ -594,7 +621,8 @@ public class DocumentController {
       })
   public ResponseEntity<List<Document>> getDocumentsByType(
       @Parameter(
-              description = "Document type (QUOTE, DELIVERY_NOTE, INVOICE, CREDIT_NOTE)",
+              description = "Document type (QUOTE, DELIVERY_NOTE, INVOICE)",
+              example = "QUOTE",
               required = true)
           @PathVariable
           DocumentType documentType) {
@@ -618,7 +646,8 @@ public class DocumentController {
       })
   public ResponseEntity<List<Document>> getDocumentsByStatus(
       @Parameter(
-              description = "Document status (DRAFT, VALIDATED, CANCELLED, PAID)",
+              description = "Document status (DRAFT, VALIDATED, CANCELLED)",
+              example = "DRAFT",
               required = true)
           @PathVariable
           DocumentStatus status) {

@@ -55,7 +55,7 @@ public class PaymentReceipt {
   private Client client;
 
   @Schema(description = "Amount paid", example = "500.00")
-  @Column(name = "amount_paid", precision = 19, scale = 3)
+  @Column(name = "amount_paid", precision = 19, scale = 3, nullable = false)
   private BigDecimal amountPaid;
 
   @Schema(description = "Date of payment", example = "2024-01-01T10:00:00")

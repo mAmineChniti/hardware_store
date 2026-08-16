@@ -46,7 +46,6 @@ class PasswordResetServiceTest {
 
   @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
   @Mock private UserRepository userRepository;
-  @Mock private EmailService emailService;
   @Mock private ApplicationEventPublisher applicationEventPublisher;
   @Mock private TransactionTemplate transactionTemplate;
 
@@ -70,7 +69,6 @@ class PasswordResetServiceTest {
         new PasswordResetService(
             passwordResetTokenRepository,
             userRepository,
-            emailService,
             passwordEncoder,
             applicationEventPublisher,
             transactionTemplate,

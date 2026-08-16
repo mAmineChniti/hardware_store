@@ -1,7 +1,7 @@
 -- ============================================
 -- INOVEXAHUB - Système de Gestion Commerciale et Point de Vente (POS)
 -- Sprint 1: Schéma Relationnel SQL
--- Version: 1.0 (MVP)
+-- Version: 2.0 (ProductBatch, ProductVariant, Delivery Fee)
 -- Database: PostgreSQL
 -- ============================================
 
@@ -10,12 +10,15 @@ DROP TABLE IF EXISTS credit_history CASCADE;
 DROP TABLE IF EXISTS payment_receipts CASCADE;
 DROP TABLE IF EXISTS document_lines CASCADE;
 DROP TABLE IF EXISTS documents CASCADE;
-DROP TABLE IF EXISTS product_costs CASCADE;
+DROP TABLE IF EXISTS product_batches CASCADE;
+DROP TABLE IF EXISTS product_variants CASCADE;
 DROP TABLE IF EXISTS product_conditionings CASCADE;
 DROP TABLE IF EXISTS products CASCADE;
 DROP TABLE IF EXISTS suppliers CASCADE;
 DROP TABLE IF EXISTS clients CASCADE;
 DROP TABLE IF EXISTS refresh_tokens CASCADE;
+DROP TABLE IF EXISTS access_tokens CASCADE;
+DROP TABLE IF EXISTS password_reset_tokens CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS audit_logs CASCADE;
 
@@ -105,22 +108,41 @@ CREATE TABLE products (
     image TEXT, -- Base64 encoded image string
     category VARCHAR(50),
     unit_type VARCHAR(20) NOT NULL CHECK (unit_type IN ('UNITARY', 'WEIGHT', 'LENGTH', 'VOLUME')),
-    is_heavy_material BOOLEAN NOT NULL DEFAULT FALSE,
     base_unit VARCHAR(20), -- e.g., "m", "kg", "piece"
     stock_quantity DECIMAL(19,3) NOT NULL DEFAULT 0.000,
     average_purchase_price DECIMAL(19,3) NOT NULL DEFAULT 0.000, -- PAMP for margin calculation
-    price_on_site DECIMAL(19,3), -- Prix de Vente Sur Place (for heavy materials)
-    price_delivered DECIMAL(19,3), -- Prix de Vente Livré (for heavy materials)
+    unit_price DECIMAL(19,3), -- Default unit selling price
+    supplier_id BIGINT, -- Default supplier reference
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP
+    updated_at TIMESTAMP,
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 );
 
--- Index on reference for internal lookup
+-- Index on reference for fast POS scanning
 CREATE INDEX idx_products_reference ON products(reference);
 -- Index on name for predictive search
 CREATE INDEX idx_products_name ON products(name);
 -- Index on category for filtering
 CREATE INDEX idx_products_category ON products(category);
+
+-- ============================================
+-- TABLE: product_variants
+-- Section 3.1.1: Variantes Multi-SKU avec Attributs JSON
+-- ============================================
+CREATE TABLE product_variants (
+    id BIGSERIAL PRIMARY KEY,
+    version BIGINT NOT NULL DEFAULT 0,
+    product_id BIGINT NOT NULL,
+    sku VARCHAR(50) UNIQUE NOT NULL,
+    variant_name VARCHAR(100),
+    attributes TEXT, -- JSON: {"caliber": "1.5mm", "material": "copper"}
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+-- Index on product_id for fast lookup
+CREATE INDEX idx_product_variants_product_id ON product_variants(product_id);
 
 -- ============================================
 -- TABLE: product_conditionings
@@ -141,27 +163,37 @@ CREATE TABLE product_conditionings (
 CREATE INDEX idx_product_conditionings_product_id ON product_conditionings(product_id);
 
 -- ============================================
--- TABLE: product_costs
--- Section 3.1.3: Historique des Coûts Unitaires par Date
+-- TABLE: product_batches
+-- Section 3.1.3: Lots d'Inventaire FIFO
 -- ============================================
-CREATE TABLE product_costs (
+CREATE TABLE product_batches (
     id BIGSERIAL PRIMARY KEY,
+    version BIGINT NOT NULL DEFAULT 0,
     product_id BIGINT NOT NULL,
-    unit_cost DECIMAL(19,3) NOT NULL,
-    effective_date DATE NOT NULL,
+    variant_id BIGINT,
+    quantity DECIMAL(19,3) NOT NULL,
+    unit_cost DECIMAL(19,3) NOT NULL, -- Purchase cost for this batch
+    unit_price DECIMAL(19,3) NOT NULL, -- Selling price for this batch
     supplier_id BIGINT,
     notes VARCHAR(500),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
-    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+    updated_at TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES products(id),
+    FOREIGN KEY (variant_id) REFERENCES product_variants(id),
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
+    CONSTRAINT chk_batches_non_negative CHECK (
+        quantity >= 0 AND unit_cost >= 0 AND unit_price >= 0
+    )
 );
 
--- Index on product_id for fast lookup
-CREATE INDEX idx_product_costs_product_id ON product_costs(product_id);
--- Index on effective_date for date-based queries
-CREATE INDEX idx_product_costs_effective_date ON product_costs(effective_date);
--- Composite index for product + date queries
-CREATE INDEX idx_product_costs_product_date ON product_costs(product_id, effective_date);
+-- Partial index for available batches by product (FIFO: created_at ASC, id ASC)
+CREATE INDEX idx_batch_product_variant_available
+    ON product_batches(product_id, created_at, id)
+    WHERE quantity > 0;
+-- Partial index for available batches by variant (FIFO ordering)
+CREATE INDEX idx_batch_variant_available
+    ON product_batches(variant_id, created_at, id)
+    WHERE quantity > 0;
 
 -- ============================================
 -- TABLE: documents
@@ -181,7 +213,8 @@ CREATE TABLE documents (
     vat_rate DECIMAL(5,2) NOT NULL DEFAULT 19.00,
     total_vat DECIMAL(19,3) NOT NULL DEFAULT 0.000,
     total_including_tax DECIMAL(19,3) NOT NULL DEFAULT 0.000,
-    transport_fee DECIMAL(19,3) NOT NULL DEFAULT 10.000, -- Default for BL
+    is_delivery BOOLEAN NOT NULL DEFAULT FALSE,
+    transport_fee DECIMAL(19,3), -- Nullable: only set when is_delivery = TRUE
     stamp_duty DECIMAL(19,3) NOT NULL DEFAULT 1.000, -- Default for Invoices
     is_credit_sale BOOLEAN NOT NULL DEFAULT FALSE,
     converted_to_invoice_id BIGINT,
@@ -189,7 +222,11 @@ CREATE TABLE documents (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP,
     FOREIGN KEY (client_id) REFERENCES clients(id),
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    CONSTRAINT chk_documents_transport_fee CHECK (
+        (is_delivery = TRUE AND transport_fee IS NOT NULL)
+        OR (is_delivery = FALSE AND transport_fee IS NULL)
+    )
 );
 
 -- Index on document_number for fast lookup
@@ -211,8 +248,11 @@ CREATE TABLE document_lines (
     id BIGSERIAL PRIMARY KEY,
     document_id BIGINT NOT NULL,
     product_id BIGINT,
+    variant_id BIGINT,
     line_number INTEGER,
     conditioning_description VARCHAR(100), -- Snapshot of how product was sold
+    conditioning_quantity_per_unit DECIMAL(19,3) DEFAULT 1.000,
+    batch_allocations TEXT, -- JSON snapshot of FIFO batch allocation
     quantity DECIMAL(19,3),
     unit_price DECIMAL(19,3),
     unit_cost DECIMAL(19,3) DEFAULT 0.000, -- Cost per unit snapshot at sale time for margin calculation
@@ -222,7 +262,12 @@ CREATE TABLE document_lines (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP,
     FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(id)
+    FOREIGN KEY (product_id) REFERENCES products(id),
+    FOREIGN KEY (variant_id) REFERENCES product_variants(id),
+    CONSTRAINT chk_document_lines_variant_requires_product CHECK (
+        variant_id IS NULL OR product_id IS NOT NULL
+    ),
+    CONSTRAINT uq_document_lines_document_line_number UNIQUE (document_id, line_number)
 );
 
 -- Index on document_id for fast lookup
@@ -384,20 +429,38 @@ CREATE UNIQUE INDEX idx_prt_active_user ON password_reset_tokens(user_id) WHERE 
 -- SAMPLE DATA (for testing)
 -- ============================================
 
+-- Insert sample supplier
+INSERT INTO suppliers (name, phone, email, address, tax_identification_number, contact_person, payment_terms) VALUES
+('Distribution Bâtiment Tunisie', '+216 71 234 567', 'contact@dbt.tn', '45 Rue du Commerce, Tunis', '9876543/B/M/000', 'Ahmed Ben Ali', '30 jours');
+
 -- Insert sample client
 INSERT INTO clients (version, name, phone, email, address, tax_identification_number, credit_limit, current_debt) VALUES
 (0, 'ABC Construction SARL', '+216 71 123 456', 'contact@abc.tn', '123 Rue de l''Industrie, Tunis', '1234567/A/M/000', 5000.000, 0.000);
 
--- Insert sample products
-INSERT INTO products (reference, name, description, category, unit_type, is_heavy_material, base_unit, stock_quantity, average_purchase_price, price_on_site, price_delivered) VALUES
-('PROD-001', 'Marteau Professionnel', 'Marteau à tête bombée, manche en fibre de verre', 'Outillage', 'UNITARY', FALSE, 'pièce', 50.000, 25.000, 35.000, NULL),
-('PROD-002', 'Fil Électrique 2.5mm²', 'Fil électrique rigide, couleur rouge, vendu au mètre', 'Électricité', 'LENGTH', FALSE, 'm', 500.000, 0.800, 1.500, NULL),
-('PROD-003', 'Sac de Ciment 50Kg', 'Ciment Portland CPJ-35', 'Matériaux', 'WEIGHT', TRUE, 'sac', 200.000, 12.000, 14.500, 15.000),
-('PROD-004', 'Brique de construction', 'Brique rouge standard 20x10x5cm', 'Matériaux', 'UNITARY', TRUE, 'pièce', 5000.000, 0.500, 0.720, 0.780);
+-- Insert sample products (with unit_price and supplier_id)
+INSERT INTO products (reference, name, description, category, unit_type, base_unit, stock_quantity, average_purchase_price, unit_price, supplier_id) VALUES
+('PROD-001', 'Marteau Professionnel', 'Marteau à tête bombée, manche en fibre de verre', 'Outillage', 'UNITARY', 'pièce', 50.000, 25.000, 35.000, 1),
+('PROD-002', 'Fil Électrique 2.5mm²', 'Fil électrique rigide, couleur rouge, vendu au mètre', 'Électricité', 'LENGTH', 'm', 350.000, 0.821, 1.500, 1),
+('PROD-003', 'Sac de Ciment 50Kg', 'Ciment Portland CPJ-35', 'Matériaux', 'WEIGHT', 'sac', 200.000, 12.000, 15.000, 1),
+('PROD-004', 'Brique de construction', 'Brique rouge standard 20x10x5cm', 'Matériaux', 'UNITARY', 'pièce', 5000.000, 0.500, 0.720, 1);
 
--- Insert sample product conditioning
+-- Insert sample product variants
+INSERT INTO product_variants (product_id, sku, variant_name, attributes) VALUES
+(2, 'FIL-2.5-ROUGE', 'Fil 2.5mm² Rouge', '{"color": "red", "caliber": "2.5mm²"}'),
+(2, 'FIL-2.5-BLEU', 'Fil 2.5mm² Bleu', '{"color": "blue", "caliber": "2.5mm²"}'),
+(3, 'CIM-CPJ35-50KG', 'Ciment CPJ-35 50Kg', '{"grade": "CPJ-35", "weight": "50Kg"}');
+
+-- Insert sample product conditionings
 INSERT INTO product_conditionings (product_id, description, quantity_per_unit, unit_price) VALUES
 (2, 'Rouleau 100m', 100.000, 100.000); -- Non-linear pricing: 100m roll = 100 DT (not 150 DT)
+
+-- Insert sample product batches (FIFO inventory)
+INSERT INTO product_batches (product_id, variant_id, quantity, unit_cost, unit_price, supplier_id, notes) VALUES
+(1, NULL, 50.000, 25.000, 35.000, 1, 'Stock initial'),
+(2, 1, 200.000, 0.800, 1.500, 1, 'Lot initial fil rouge'),
+(2, 2, 150.000, 0.850, 1.500, 1, 'Lot initial fil bleu'),
+(3, 3, 200.000, 12.000, 15.000, 1, 'Stock initial ciment'),
+(4, NULL, 5000.000, 0.500, 0.720, 1, 'Stock initial');
 
 -- ============================================
 -- END OF SCHEMA

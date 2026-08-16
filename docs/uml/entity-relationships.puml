@@ -1,7 +1,7 @@
 @startuml Hardware Store Entity Relationships
 ' INOVEXAHUB - Système de Gestion Commerciale et Point de Vente (POS)
 ' Sprint 1: Modélisation UML - Entity Relationships
-' Version: 1.0 (MVP)
+' Version: 2.0 (ProductBatch, ProductVariant, Delivery Fee)
 
 skinparam linetype ortho
 
@@ -60,12 +60,23 @@ entity "Product" as product {
   image : TEXT
   category : VARCHAR(50)
   unit_type : VARCHAR
-  is_heavy_material : BOOLEAN
   base_unit : VARCHAR(20)
   stock_quantity : DECIMAL(19,3)
   average_purchase_price : DECIMAL(19,3)
-  price_on_site : DECIMAL(19,3)
-  price_delivered : DECIMAL(19,3)
+  unit_price : DECIMAL(19,3)
+  supplier_id : BIGINT FK
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "ProductVariant" as product_variant {
+  *id : BIGINT
+  --
+  version : BIGINT
+  product_id : BIGINT FK
+  sku : VARCHAR(50)
+  variant_name : VARCHAR(100)
+  attributes : TEXT
   created_at : TIMESTAMP
   updated_at : TIMESTAMP
 }
@@ -81,15 +92,19 @@ entity "ProductConditioning" as conditioning {
   updated_at : TIMESTAMP
 }
 
-entity "ProductCost" as product_cost {
+entity "ProductBatch" as product_batch {
   *id : BIGINT
   --
-  product_id : BIGINT
-  supplier_id : BIGINT
+  version : BIGINT
+  product_id : BIGINT FK
+  variant_id : BIGINT FK
+  quantity : DECIMAL(19,3)
   unit_cost : DECIMAL(19,3)
-  effective_date : DATE
+  unit_price : DECIMAL(19,3)
+  supplier_id : BIGINT FK
   notes : VARCHAR(500)
   created_at : TIMESTAMP
+  updated_at : TIMESTAMP
 }
 
 entity "Document" as document {
@@ -106,6 +121,7 @@ entity "Document" as document {
   vat_rate : DECIMAL(5,2)
   total_vat : DECIMAL(19,3)
   total_including_tax : DECIMAL(19,3)
+  is_delivery : BOOLEAN
   transport_fee : DECIMAL(19,3)
   stamp_duty : DECIMAL(19,3)
   is_credit_sale : BOOLEAN
@@ -120,8 +136,11 @@ entity "DocumentLine" as document_line {
   --
   document_id : BIGINT
   product_id : BIGINT
+  variant_id : BIGINT FK
   line_number : INTEGER
   conditioning_description : VARCHAR(100)
+  conditioning_quantity_per_unit : DECIMAL(19,3)
+  batch_allocations : TEXT
   quantity : DECIMAL(19,3)
   unit_price : DECIMAL(19,3)
   unit_cost : DECIMAL(19,3)
@@ -226,10 +245,15 @@ client ||..o{ payment_receipt : "makes"
 client ||..o{ credit_history : "has"
 
 product ||..o{ conditioning : "has"
-product ||..o{ product_cost : "has cost history"
+product ||..o{ product_variant : "has variants"
+product ||..o{ product_batch : "has batches"
 product |o..o{ document_line : "appears in"
+product }o..o| supplier : "supplied by"
 
-supplier |o..o{ product_cost : "provides costs for"
+product_variant ||..o{ product_batch : "batches"
+product_variant |o..o{ document_line : "appears in"
+
+supplier |o..o{ product_batch : "supplies batches"
 
 document ||..o{ document_line : "contains"
 document |o..o{ credit_history : "generates (credit)"

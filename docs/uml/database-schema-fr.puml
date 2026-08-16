@@ -1,7 +1,7 @@
 @startuml Schéma Base de Données - Magasin de Matériaux
 ' INOVEXAHUB - Système de Gestion Commerciale et Point de Vente (POS)
 ' Sprint 1: Modélisation UML - Schéma Base de Données
-' Version: 1.0 (MVP)
+' Version: 2.0 (LotsProduit, VarianteProduit, FraisLivraison)
 ' Base de données: PostgreSQL
 
 skinparam linetype ortho
@@ -65,12 +65,22 @@ entity produits {
   image TEXT
   catégorie VARCHAR(50)
   type_unité VARCHAR(20)
-  est_matériau_lourd BOOLEAN
   unité_base VARCHAR(20)
   quantité_stock DECIMAL(19,3)
   prix_moyen_achat DECIMAL(19,3)
-  prix_sur_place DECIMAL(19,3)
-  prix_livré DECIMAL(19,3)
+  prix_unitaire DECIMAL(19,3)
+  fournisseur_id BIGINT FK
+  date_création TIMESTAMP
+  date_modification TIMESTAMP
+}
+
+entity variantes_produits {
+  id BIGSERIAL PK
+  version BIGINT
+  produit_id BIGINT FK
+  sku VARCHAR(50) UNIQUE
+  nom_variante VARCHAR(100)
+  attributs TEXT
   date_création TIMESTAMP
   date_modification TIMESTAMP
 }
@@ -85,14 +95,18 @@ entity conditionnements_produits {
   date_modification TIMESTAMP
 }
 
-entity coûts_produits {
+entity lots_produits {
   id BIGSERIAL PK
+  version BIGINT
   produit_id BIGINT FK
-  fournisseur_id BIGINT FK
+  variante_id BIGINT FK
+  quantité DECIMAL(19,3)
   coût_unitaire DECIMAL(19,3)
-  date_effective DATE
+  prix_unitaire DECIMAL(19,3)
+  fournisseur_id BIGINT FK
   notes VARCHAR(500)
   date_création TIMESTAMP
+  date_modification TIMESTAMP
 }
 
 entity documents {
@@ -108,6 +122,7 @@ entity documents {
   taux_tva DECIMAL(5,2)
   total_tva DECIMAL(19,3)
   total_ttc DECIMAL(19,3)
+  est_livraison BOOLEAN
   frais_transport DECIMAL(19,3)
   droit_timbre DECIMAL(19,3)
   est_vente_crédit BOOLEAN
@@ -121,8 +136,11 @@ entity lignes_documents {
   id BIGSERIAL PK
   document_id BIGINT FK
   produit_id BIGINT FK
+  variante_id BIGINT FK
   numéro_ligne INTEGER
   description_conditionnement VARCHAR(100)
+  quantité_par_unité_conditionnement DECIMAL(19,3)
+  allocations_lots TEXT
   quantité DECIMAL(19,3)
   prix_unitaire DECIMAL(19,3)
   coût_unitaire DECIMAL(19,3)
@@ -216,13 +234,17 @@ end note
 ' RELATIONS CLÉS ÉTRANGÈRES
 ' ============================================
 
+produits }o--o| fournisseurs : "fournisseur_id"
+variantes_produits }o--|| produits : "produit_id"
 conditionnements_produits }o--|| produits : "produit_id"
-coûts_produits }o--|| produits : "produit_id"
-coûts_produits }o--o| fournisseurs : "fournisseur_id"
+lots_produits }o--|| produits : "produit_id"
+lots_produits }o--o| variantes_produits : "variante_id"
+lots_produits }o--o| fournisseurs : "fournisseur_id"
 documents }o--o| clients : "client_id"
 documents }o--o| utilisateurs : "utilisateur_id"
 lignes_documents }o--|| documents : "document_id"
 lignes_documents }o--o| produits : "produit_id"
+lignes_documents }o--o| variantes_produits : "variante_id"
 reçus_paiements }o--|| clients : "client_id"
 reçus_paiements }o--o| utilisateurs : "utilisateur_id"
 historique_crédit }o--|| clients : "client_id"
@@ -239,20 +261,27 @@ jetons_réinitialisation }o--|| utilisateurs : "utilisateur_id"
 note right of produits
   - référence indexée pour scan POS rapide (< 500ms)
   - Supporte quantités décimales pour POIDS, LONGUEUR, VOLUME
-  - Double tarification pour matériaux lourds (Sur Place / Livré)
   - image stockée comme chaîne base64
+  - prix_unitaire: prix de vente par défaut
 end note
 
-note right of coûts_produits
-  - Historique des coûts unitaires par date
-  - Suit les fluctuations de coûts dans le temps
-  - Permet des calculs de marge précis
-  - Plusieurs fournisseurs par produit
+note right of variantes_produits
+  - Variantes multi-SKU avec attributs JSON flexibles
+  - Supporte calibre, matériau, couleur, etc.
+  - sku: identifiant unique de l'unité de stockage
+end note
+
+note right of lots_produits
+  - Suivi inventaire FIFO par lot
+  - Coût_unitaire (achat) et prix_unitaire (vente)
+  - variante_id optionnel pour lots par variante
+  - Indexes composites pour allocation FIFO efficace
 end note
 
 note right of documents
   - Héritage SINGLE_TABLE: DEVIS, BON_LIVRAISON, FACTURE
-  - frais_transport par défaut: 10.000 DT (BL)
+  - est_livraison: contrôle l'application des frais de transport
+  - frais_transport: nullable, défini uniquement si est_livraison = VRAI
   - droit_timbre par défaut: 1.000 DT (FACTURE)
   - taux_tva par défaut: 19.00%
 end note

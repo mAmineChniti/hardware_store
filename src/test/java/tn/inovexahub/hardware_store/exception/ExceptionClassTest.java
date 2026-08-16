@@ -72,4 +72,36 @@ class ExceptionClassTest {
     assertEquals("otp expired", ex.getMessage());
     assertInstanceOf(IllegalArgumentException.class, ex);
   }
+
+  // ── ProductVariantNotFoundException ────────────────────────────────────
+
+  @Test
+  void productVariantNotFoundException_withMessage() {
+    ProductVariantNotFoundException ex = new ProductVariantNotFoundException("Variant not found");
+    assertEquals("Variant not found", ex.getMessage());
+    assertInstanceOf(RuntimeException.class, ex);
+  }
+
+  @Test
+  void productVariantNotFoundException_withId() {
+    ProductVariantNotFoundException ex = new ProductVariantNotFoundException(42L);
+    assertEquals("Variant not found with id: 42", ex.getMessage());
+    assertInstanceOf(RuntimeException.class, ex);
+  }
+
+  // ── ProductBatchNotFoundException ──────────────────────────────────
+
+  @Test
+  void productBatchNotFoundException_withMessage() {
+    ProductBatchNotFoundException ex = new ProductBatchNotFoundException("Batch not found");
+    assertEquals("Batch not found", ex.getMessage());
+    assertInstanceOf(RuntimeException.class, ex);
+  }
+
+  @Test
+  void productBatchNotFoundException_withId() {
+    ProductBatchNotFoundException ex = new ProductBatchNotFoundException(42L);
+    assertEquals("Product batch not found with id: 42", ex.getMessage());
+    assertInstanceOf(RuntimeException.class, ex);
+  }
 }

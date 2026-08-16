@@ -25,10 +25,9 @@ INOVEXAHUB Hardware Store POS est une solution de gestion commerciale moderne co
 
 - **Gestion des stocks** avec support pour les unités décimales (poids, longueur, volume)
 - **Tarification par conditionnement** pour les produits vendus en lots (ex: rouleaux de câble)
-- **Double tarification** pour les matériaux lourds (Sur Place / Livré)
 - **Facturation tunisienne** conforme (Devis, Bon de Livraison, Facture avec TVA 19%)
 - **Gestion du crédit client** avec système de carnet et historique immuable
-- **Gestion des fournisseurs** avec suivi des coûts d'achat par date
+- **Gestion des fournisseurs** avec informations et matricule fiscal
 - **Authentification JWT** avec rôles (Administrateur, Employé)
 
 ## ✨ Fonctionnalités
@@ -37,10 +36,11 @@ INOVEXAHUB Hardware Store POS est une solution de gestion commerciale moderne co
 - Référence unique et code-barres pour scan POS rapide
 - Catégorisation des produits
 - Support des unités: Unitaire, Poids, Longueur, Volume
+- Variantes multi-SKU avec attributs JSON flexibles (calibre, material, etc.)
+- Suivi des stocks par lot FIFO (First-In-First-Out) pour le coût d'achat
 - Gestion des conditionnements avec tarification non linéaire
-- Historique des coûts d'achat par date et fournisseur
-- Double tarification pour matériaux lourds (Prix Sur Place / Prix Livré)
 - Gestion du stock avec alertes de stock faible
+- Verrouillage optimiste (@Version) pour la concurrence
 
 ### Gestion des Clients
 - Informations complètes (nom, téléphone, email, adresse, matricule fiscal)
@@ -51,8 +51,8 @@ INOVEXAHUB Hardware Store POS est une solution de gestion commerciale moderne co
 
 ### Facturation Tunisienne
 - **Devis** (Quote) - Document préliminaire
-- **Bon de Livraison** (Delivery Note) - Avec frais de transport (10 DT par défaut)
-- **Facture** (Invoice) - Avec droit de timbre (1 DT par défaut) et TVA 19%
+- **Bon de Livraison** (Delivery Note) - Avec frais de transport saisis par l'employé
+- **Facture** (Invoice) - Avec droit de timbre (1 DT) et TVA 19%
 - Workflow: Brouillon → Validé → Annulé
 - Calcul automatique des totaux HT, TVA, TTC
 - Support des ventes au crédit
@@ -67,11 +67,12 @@ INOVEXAHUB Hardware Store POS est une solution de gestion commerciale moderne co
 - Informations complètes du fournisseur
 - Matricule fiscal pour conformité
 - Personne de contact et conditions de paiement
-- Suivi des coûts d'achat par fournisseur
 
 ### Sécurité
 - Authentification JWT avec tokens sécurisés
 - Rôles d'utilisateur: Administrateur, Employé
+- Le paramètre `adminOverride` est vérifié côté serveur (réservé aux ADMIN)
+- Validation côté serveur avec Bean Validation (@NotNull, @DecimalMin, etc.)
 - Journal d'audit pour les actions critiques
 - Soft delete pour préservation des données
 
@@ -115,8 +116,9 @@ INOVEXAHUB Hardware Store POS est une solution de gestion commerciale moderne co
 - **clients** - Clients avec gestion de crédit
 - **suppliers** - Fournisseurs de produits
 - **products** - Articles en stock avec tarification
+- **product_variants** - Variantes multi-SKU avec attributs JSON flexibles
+- **product_batches** - Lots d'inventaire FIFO (coût d'achat par lot)
 - **product_conditionings** - Conditionnements et tarifs spéciaux
-- **product_costs** - Historique des coûts d'achat
 - **documents** - Devis, Bons de Livraison, Factures
 - **document_lines** - Lignes de documents
 - **payment_receipts** - Reçus de paiement
@@ -141,8 +143,9 @@ INOVEXAHUB Hardware Store POS est une solution de gestion commerciale moderne co
 - **Client** - Gestion des clients et crédit
 - **Supplier** - Gestion des fournisseurs
 - **Product** - Gestion des articles et stock
+- **ProductVariant** - Variantes multi-SKU avec attributs JSON flexibles
+- **ProductBatch** - Lots d'inventaire FIFO pour le suivi des coûts
 - **ProductConditioning** - Conditionnements et tarifs
-- **ProductCost** - Historique des coûts
 - **Document** - Facturation (Devis, BL, Facture)
 - **DocumentLine** - Lignes de documents
 - **PaymentReceipt** - Paiements clients
@@ -170,8 +173,9 @@ INOVEXAHUB Hardware Store POS est une solution de gestion commerciale moderne co
 - **Client 1 -- * PaymentReceipt** - Effectue les paiements
 - **Client 1 -- * CreditHistory** - Historique de crédit
 - **Product 1 -- * ProductConditioning** - Conditionnements
-- **Product 1 -- * ProductCost** - Historique des coûts
-- **Supplier 1 -- * ProductCost** - Fournit les coûts
+- **Product 1 -- * ProductVariant** - Variantes multi-SKU
+- **Product 1 -- * ProductBatch** - Lots d'inventaire FIFO
+- **ProductVariant 1 -- * ProductBatch** - Lots par variante
 - **Document 1 -- * DocumentLine** - Contient les lignes
 - **Document 1 -- * CreditHistory** - Génère (si crédit)
 - **PaymentReceipt 1 -- 1 CreditHistory** - Génère l'historique
@@ -299,6 +303,7 @@ http://localhost:8080/swagger-ui.html
 - `GET /api/clients/{id}/credit-history/active` - Récupérer l'historique de crédit actif
 - `GET /api/clients/{id}/payments` - Récupérer tous les reçus de paiement
 - `POST /api/clients/{id}/payments` - Traiter un paiement (ADMIN ou EMPLOYEE)
+- `GET /api/clients/{clientId}/payments/{receiptId}/pdf` - Générer le PDF d'un reçu de paiement
 - `GET /api/clients/debtors` - Récupérer les clients avec dette
 - `GET /api/clients/near-limit` - Récupérer les clients proches de leur limite de crédit
 
@@ -306,24 +311,35 @@ http://localhost:8080/swagger-ui.html
 - `GET /api/products` - Récupérer tous les produits
 - `GET /api/products/{id}` - Récupérer un produit par ID
 - `GET /api/products/reference/{reference}` - Récupérer un produit par référence
-- `POST /api/products` - Créer un nouveau produit (ADMIN ou EMPLOYEE)
+- `POST /api/products` - Créer un nouveau produit avec lot initial (ADMIN ou EMPLOYEE)
 - `PUT /api/products/{id}` - Mettre à jour un produit (ADMIN ou EMPLOYEE)
 - `DELETE /api/products/{id}` - Supprimer un produit (ADMIN uniquement)
 - `GET /api/products/search` - Rechercher des produits par mot-clé
 - `GET /api/products/category/{category}` - Récupérer les produits par catégorie
-- `GET /api/products/heavy-materials` - Récupérer les matériaux lourds (tarification double)
 - `GET /api/products/low-stock` - Récupérer les produits avec stock faible
 - `GET /api/products/{productId}/conditionings` - Récupérer les conditionnements d'un produit
 - `POST /api/products/{productId}/conditionings` - Ajouter un conditionnement (ADMIN ou EMPLOYEE)
 - `PUT /api/products/conditionings/{id}` - Mettre à jour un conditionnement (ADMIN ou EMPLOYEE)
 - `DELETE /api/products/conditionings/{id}` - Supprimer un conditionnement (ADMIN uniquement)
-- `GET /api/products/{productId}/costs` - Récupérer l'historique des coûts
-- `GET /api/products/{productId}/costs/current` - Récupérer le coût actuel
-- `POST /api/products/{productId}/costs` - Ajouter un coût (met à jour PAMP, ADMIN ou EMPLOYEE)
-- `GET /api/products/{productId}/costs/{date}` - Récupérer le coût pour une date spécifique
-- `GET /api/products/{productId}/costs/between` - Récupérer les coûts entre deux dates
-- `DELETE /api/products/costs/{id}` - Supprimer un coût (ADMIN uniquement)
 - `POST /api/products/{productId}/stock` - Mettre à jour la quantité en stock (ADMIN ou EMPLOYEE)
+
+#### Batches FIFO (`/api/products/{productId}/batches`)
+- `POST /api/products/{productId}/batches` - Ajouter un lot d'inventaire (ADMIN ou EMPLOYEE)
+- `GET /api/products/{productId}/batches` - Récupérer les lots d'un produit
+- `GET /api/products/{productId}/batches/available` - Récupérer les lots avec stock disponible
+- `PUT /api/products/batches/{batchId}/quantity` - Corriger la quantité d'un lot (ADMIN ou EMPLOYEE)
+- `PUT /api/products/batches/{batchId}/pricing` - Modifier le coût et le prix de vente d'un lot (ADMIN ou EMPLOYEE; le paramètre `adminOverride` est réservé aux ADMIN)
+- `DELETE /api/products/batches/{batchId}` - Supprimer un lot (ADMIN ou EMPLOYEE)
+
+#### Variantes (`/api/products/{productId}/variants`)
+- `POST /api/products/{productId}/variants` - Créer une variante multi-SKU (ADMIN ou EMPLOYEE)
+- `GET /api/products/{productId}/variants` - Récupérer les variantes d'un produit
+- `GET /api/products/variants/{variantId}` - Récupérer une variante par ID
+- `PUT /api/products/variants/{variantId}` - Mettre à jour une variante (ADMIN ou EMPLOYEE)
+- `DELETE /api/products/variants/{variantId}` - Supprimer une variante (ADMIN ou EMPLOYEE)
+- `POST /api/products/variants/{variantId}/batches` - Ajouter un lot pour une variante (ADMIN ou EMPLOYEE)
+- `GET /api/products/variants/{variantId}/batches` - Récupérer les lots d'une variante
+- `GET /api/products/variants/{variantId}/batches/available` - Récupérer les lots disponibles d'une variante
 
 #### Documents (`/api/documents`)
 - `GET /api/documents` - Récupérer tous les documents
@@ -412,7 +428,7 @@ Le rapport de couverture est généré via **JaCoCo** dans chaque build CI et di
 |----------|---------|-------|------------|
 | Instructions | 8 247 | 8 440 | **97.7%** |
 | Branches | 407 | 462 | **88.1%** |
-| Tests | — | 515 | ✅ Tous passent |
+| Tests | — | 733 | ✅ Tous passent |
 
 ### Couverture par Composant
 
