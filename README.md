@@ -220,9 +220,9 @@ Le fichier `docs/database/schema.sql` contient le schéma complet de la base de 
 
 ### Prérequis
 
-- Java 17 ou supérieur
+- Java 26 ou supérieur
 - PostgreSQL 14 ou supérieur
-- Gradle 8.x
+- Gradle 9.x
 
 ### Étapes d'Installation
 
@@ -261,7 +261,7 @@ export OTP_EXPIRY_MINUTES=10
 
 5. **Accéder à l'application**
 - API: http://localhost:8080
-- Swagger UI: http://localhost:8080/swagger-ui.html
+- Swagger UI: http://localhost:8080/swagger-ui/index.html
 
 ### Utilisateur par Défaut
 
@@ -275,7 +275,7 @@ export OTP_EXPIRY_MINUTES=10
 
 L'API est documentée avec Swagger/OpenAPI et accessible à:
 ```text
-http://localhost:8080/swagger-ui.html
+http://localhost:8080/swagger-ui/index.html
 ```
 
 ### Endpoints Principaux
@@ -426,9 +426,9 @@ Le rapport de couverture est généré via **JaCoCo** dans chaque build CI et di
 
 | Métrique | Couvert | Total | Couverture |
 |----------|---------|-------|------------|
-| Instructions | 8 247 | 8 440 | **97.7%** |
-| Branches | 407 | 462 | **88.1%** |
-| Tests | — | 733 | ✅ Tous passent |
+| Instructions | 11 326 | 11 440 | **99%** |
+| Branches | 724 | 764 | **94%** |
+| Tests | — | 840+ | ✅ Tous passent |
 
 ### Couverture par Composant
 
