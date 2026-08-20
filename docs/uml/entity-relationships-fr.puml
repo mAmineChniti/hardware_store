@@ -1,7 +1,7 @@
 @startuml Relations Entités - Magasin de Matériaux
 ' INOVEXAHUB - Système de Gestion Commerciale et Point de Vente (POS)
 ' Sprint 1: Modélisation UML - Relations Entités
-' Version: 1.0 (MVP)
+' Version: 2.0 (LotsProduit, VarianteProduit, FraisLivraison)
 
 skinparam linetype ortho
 
@@ -60,12 +60,23 @@ entity "Produit" as produit {
   image : TEXT
   catégorie : VARCHAR(50)
   type_unité : VARCHAR
-  est_matériau_lourd : BOOLEAN
   unité_base : VARCHAR(20)
   quantité_stock : DECIMAL(19,3)
   prix_moyen_achat : DECIMAL(19,3)
-  prix_sur_place : DECIMAL(19,3)
-  prix_livré : DECIMAL(19,3)
+  prix_unitaire : DECIMAL(19,3)
+  fournisseur_id : BIGINT FK
+  date_création : TIMESTAMP
+  date_modification : TIMESTAMP
+}
+
+entity "VarianteProduit" as variante_produit {
+  *id : BIGINT
+  --
+  version : BIGINT
+  produit_id : BIGINT FK
+  sku : VARCHAR(50)
+  nom_variante : VARCHAR(100)
+  attributs : TEXT
   date_création : TIMESTAMP
   date_modification : TIMESTAMP
 }
@@ -81,15 +92,19 @@ entity "ConditionnementProduit" as conditionnement {
   date_modification : TIMESTAMP
 }
 
-entity "CoûtProduit" as coût_produit {
+entity "LotProduit" as lot_produit {
   *id : BIGINT
   --
-  produit_id : BIGINT
-  fournisseur_id : BIGINT
+  version : BIGINT
+  produit_id : BIGINT FK
+  variante_id : BIGINT FK
+  quantité : DECIMAL(19,3)
   coût_unitaire : DECIMAL(19,3)
-  date_effective : DATE
+  prix_unitaire : DECIMAL(19,3)
+  fournisseur_id : BIGINT FK
   notes : VARCHAR(500)
   date_création : TIMESTAMP
+  date_modification : TIMESTAMP
 }
 
 entity "Document" as document {
@@ -106,6 +121,7 @@ entity "Document" as document {
   taux_tva : DECIMAL(5,2)
   total_tva : DECIMAL(19,3)
   total_ttc : DECIMAL(19,3)
+  est_livraison : BOOLEAN
   frais_transport : DECIMAL(19,3)
   droit_timbre : DECIMAL(19,3)
   est_vente_crédit : BOOLEAN
@@ -120,8 +136,11 @@ entity "LigneDocument" as ligne_document {
   --
   document_id : BIGINT
   produit_id : BIGINT
+  variante_id : BIGINT FK
   numéro_ligne : INTEGER
   description_conditionnement : VARCHAR(100)
+  quantité_par_unité_conditionnement : DECIMAL(19,3)
+  allocations_lots : TEXT
   quantité : DECIMAL(19,3)
   prix_unitaire : DECIMAL(19,3)
   coût_unitaire : DECIMAL(19,3)
@@ -226,10 +245,15 @@ client ||..o{ reçu_paiement : "effectue"
 client ||..o{ historique_crédit : "possède"
 
 produit ||..o{ conditionnement : "possède"
-produit ||..o{ coût_produit : "possède historique coûts"
+produit ||..o{ variante_produit : "possède variantes"
+produit ||..o{ lot_produit : "possède lots"
 produit |o..o{ ligne_document : "apparaît dans"
+produit }o..o| fournisseur : "fourni par"
 
-fournisseur |o..o{ coût_produit : "fournit coûts pour"
+variante_produit |o..o{ lot_produit : "lots"
+variante_produit |o..o{ ligne_document : "apparaît dans"
+
+fournisseur |o..o{ lot_produit : "fournit lots"
 
 document ||..o{ ligne_document : "contient"
 document |o..o{ historique_crédit : "génère (crédit)"

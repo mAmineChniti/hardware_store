@@ -16,9 +16,11 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.MissingRequestValueException;
 import org.springframework.web.server.ResponseStatusException;
 import tn.inovexahub.hardware_store.dto.ErrorResponse;
 
@@ -55,6 +57,66 @@ public class GlobalExceptionHandler {
             request.getRequestURI(),
             null);
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+  }
+
+  @ExceptionHandler(ProductNotFoundException.class)
+  public ResponseEntity<ErrorResponse> handleProductNotFoundException(
+      ProductNotFoundException ex, HttpServletRequest request) {
+    log.error("Product not found: {}", ex.getMessage());
+    ErrorResponse error =
+        new ErrorResponse(
+            HttpStatus.NOT_FOUND.value(),
+            "Product Not Found",
+            ex.getMessage(),
+            LocalDateTime.now(),
+            request.getRequestURI(),
+            null);
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+  }
+
+  @ExceptionHandler(ProductVariantNotFoundException.class)
+  public ResponseEntity<ErrorResponse> handleProductVariantNotFoundException(
+      ProductVariantNotFoundException ex, HttpServletRequest request) {
+    log.error("Variant not found: {}", ex.getMessage());
+    ErrorResponse error =
+        new ErrorResponse(
+            HttpStatus.NOT_FOUND.value(),
+            "Variant Not Found",
+            ex.getMessage(),
+            LocalDateTime.now(),
+            request.getRequestURI(),
+            null);
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+  }
+
+  @ExceptionHandler(ProductBatchNotFoundException.class)
+  public ResponseEntity<ErrorResponse> handleProductBatchNotFoundException(
+      ProductBatchNotFoundException ex, HttpServletRequest request) {
+    log.error("Product batch not found: {}", ex.getMessage());
+    ErrorResponse error =
+        new ErrorResponse(
+            HttpStatus.NOT_FOUND.value(),
+            "Product Batch Not Found",
+            ex.getMessage(),
+            LocalDateTime.now(),
+            request.getRequestURI(),
+            null);
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+  }
+
+  @ExceptionHandler(SkuAlreadyExistsException.class)
+  public ResponseEntity<ErrorResponse> handleSkuAlreadyExistsException(
+      SkuAlreadyExistsException ex, HttpServletRequest request) {
+    log.error("SKU already exists: {}", ex.getMessage());
+    ErrorResponse error =
+        new ErrorResponse(
+            HttpStatus.CONFLICT.value(),
+            "SKU Already Exists",
+            ex.getMessage(),
+            LocalDateTime.now(),
+            request.getRequestURI(),
+            null);
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
   }
 
   @ExceptionHandler(CreditLimitExceededException.class)
@@ -205,6 +267,37 @@ public class GlobalExceptionHandler {
             HttpStatus.BAD_REQUEST.value(),
             "Type Mismatch",
             message,
+            LocalDateTime.now(),
+            request.getRequestURI(),
+            null);
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+  }
+
+  @ExceptionHandler(MissingServletRequestParameterException.class)
+  public ResponseEntity<ErrorResponse> handleMissingServletRequestParameter(
+      MissingServletRequestParameterException ex, HttpServletRequest request) {
+    log.error("Missing request parameter: {}", ex.getMessage());
+    String message = String.format("Required parameter '%s' is missing", ex.getParameterName());
+    ErrorResponse error =
+        new ErrorResponse(
+            HttpStatus.BAD_REQUEST.value(),
+            "Missing Parameter",
+            message,
+            LocalDateTime.now(),
+            request.getRequestURI(),
+            null);
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+  }
+
+  @ExceptionHandler(MissingRequestValueException.class)
+  public ResponseEntity<ErrorResponse> handleMissingRequestValue(
+      MissingRequestValueException ex, HttpServletRequest request) {
+    log.error("Missing request value: {}", ex.getMessage());
+    ErrorResponse error =
+        new ErrorResponse(
+            HttpStatus.BAD_REQUEST.value(),
+            "Missing Value",
+            "A required request value is missing",
             LocalDateTime.now(),
             request.getRequestURI(),
             null);

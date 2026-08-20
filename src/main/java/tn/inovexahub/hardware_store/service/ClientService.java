@@ -203,6 +203,10 @@ public class ClientService {
     return paymentReceiptRepository.findByClientId(clientId);
   }
 
+  public Optional<PaymentReceipt> getClientPaymentReceiptById(Long clientId, Long receiptId) {
+    return paymentReceiptRepository.findByIdAndClientId(receiptId, clientId);
+  }
+
   /**
    * Process a payment receipt and update credit history.
    *
@@ -214,6 +218,10 @@ public class ClientService {
    */
   public PaymentReceipt processPayment(
       Client client, BigDecimal amountPaid, PaymentMethod paymentMethod, User user) {
+    if (amountPaid == null || amountPaid.compareTo(BigDecimal.ZERO) <= 0) {
+      throw new InvalidPaymentException("Payment amount must be positive");
+    }
+
     // Generate receipt number
     String receiptNumber = generateReceiptNumber();
 

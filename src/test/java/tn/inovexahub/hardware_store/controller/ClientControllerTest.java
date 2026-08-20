@@ -18,7 +18,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.server.ResponseStatusException;
+import tn.inovexahub.hardware_store.dto.PaymentRequest;
 import tn.inovexahub.hardware_store.entity.Client;
 import tn.inovexahub.hardware_store.entity.CreditHistory;
 import tn.inovexahub.hardware_store.entity.PaymentReceipt;
@@ -29,18 +31,20 @@ import tn.inovexahub.hardware_store.exception.ClientNotFoundException;
 import tn.inovexahub.hardware_store.exception.InvalidPaymentException;
 import tn.inovexahub.hardware_store.repository.UserRepository;
 import tn.inovexahub.hardware_store.service.ClientService;
+import tn.inovexahub.hardware_store.service.PdfGenerationService;
 
 @ExtendWith(MockitoExtension.class)
 class ClientControllerTest {
 
   @Mock private ClientService clientService;
   @Mock private UserRepository userRepository;
+  @Mock private PdfGenerationService pdfGenerationService;
 
   private ClientController clientController;
 
   @BeforeEach
   void setUp() {
-    clientController = new ClientController(clientService, userRepository);
+    clientController = new ClientController(clientService, userRepository, pdfGenerationService);
   }
 
   private Client createClient(Long id, String name) {
@@ -346,15 +350,18 @@ class ClientControllerTest {
     Client client = createClient(1L, "Ahmed");
     User user = createUser(1L, "admin@example.com");
     PaymentReceipt receipt = createPaymentReceipt(1L);
+    Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
+    when(authentication.getName()).thenReturn("admin@example.com");
 
     when(clientService.getClientById(1L)).thenReturn(Optional.of(client));
-    when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+    when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(user));
     when(clientService.processPayment(
             eq(client), eq(new BigDecimal("200.00")), eq(PaymentMethod.CASH), eq(user)))
         .thenReturn(receipt);
 
+    PaymentRequest request = new PaymentRequest(new BigDecimal("200.00"), PaymentMethod.CASH);
     ResponseEntity<PaymentReceipt> response =
-        clientController.processPayment(1L, new BigDecimal("200.00"), PaymentMethod.CASH, 1L);
+        clientController.processPayment(1L, request, authentication);
 
     assertEquals(HttpStatus.CREATED, response.getStatusCode());
     assertEquals("REC-2024-001", response.getBody().getReceiptNumber());
@@ -362,14 +369,15 @@ class ClientControllerTest {
 
   @Test
   void processPayment_ClientNotFound_ThrowsNotFound() {
+    Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
+
     when(clientService.getClientById(999L)).thenReturn(Optional.empty());
 
+    PaymentRequest request = new PaymentRequest(new BigDecimal("200.00"), PaymentMethod.CASH);
     ResponseStatusException ex =
         org.junit.jupiter.api.Assertions.assertThrows(
             ResponseStatusException.class,
-            () ->
-                clientController.processPayment(
-                    999L, new BigDecimal("200.00"), PaymentMethod.CASH, 1L));
+            () -> clientController.processPayment(999L, request, authentication));
 
     assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
   }
@@ -378,39 +386,41 @@ class ClientControllerTest {
   void processPayment_InvalidPaymentExceedsDebt_ThrowsBadRequest() {
     Client client = createClient(1L, "Ahmed");
     User user = createUser(1L, "admin@example.com");
+    Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
+    when(authentication.getName()).thenReturn("admin@example.com");
 
     when(clientService.getClientById(1L)).thenReturn(Optional.of(client));
-    when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+    when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(user));
     when(clientService.processPayment(
             eq(client), eq(new BigDecimal("99999.00")), eq(PaymentMethod.CASH), eq(user)))
         .thenThrow(new InvalidPaymentException("Payment amount exceeds current debt"));
 
+    PaymentRequest request = new PaymentRequest(new BigDecimal("99999.00"), PaymentMethod.CASH);
     ResponseStatusException ex =
         org.junit.jupiter.api.Assertions.assertThrows(
             ResponseStatusException.class,
-            () ->
-                clientController.processPayment(
-                    1L, new BigDecimal("99999.00"), PaymentMethod.CASH, 1L));
+            () -> clientController.processPayment(1L, request, authentication));
 
     assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
   }
 
   @Test
-  void processPayment_UserNotFound_SetsUserNull() {
+  void processPayment_AuthenticatedUserNotFound_ThrowsNotFound() {
     Client client = createClient(1L, "Ahmed");
-    PaymentReceipt receipt = createPaymentReceipt(1L);
+    Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
+    when(authentication.getName()).thenReturn("unknown@example.com");
 
     when(clientService.getClientById(1L)).thenReturn(Optional.of(client));
-    when(userRepository.findById(999L)).thenReturn(Optional.empty());
-    when(clientService.processPayment(
-            eq(client), eq(new BigDecimal("200.00")), eq(PaymentMethod.CASH), eq(null)))
-        .thenReturn(receipt);
+    when(userRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
 
-    ResponseEntity<PaymentReceipt> response =
-        clientController.processPayment(1L, new BigDecimal("200.00"), PaymentMethod.CASH, 999L);
+    PaymentRequest request = new PaymentRequest(new BigDecimal("200.00"), PaymentMethod.CASH);
+    ResponseStatusException ex =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            ResponseStatusException.class,
+            () -> clientController.processPayment(1L, request, authentication));
 
-    assertEquals(HttpStatus.CREATED, response.getStatusCode());
-    assertEquals("REC-2024-001", response.getBody().getReceiptNumber());
+    assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
+    assertEquals("Authenticated user not found", ex.getReason());
   }
 
   // --- getDebtors ---
@@ -488,5 +498,59 @@ class ClientControllerTest {
     assertEquals(HttpStatus.OK, response.getStatusCode());
     assertEquals(1, response.getBody().size());
     verify(clientService).getClientsNearCreditLimit(new BigDecimal("100.0"));
+  }
+
+  // --- generatePaymentReceiptPdf ---
+
+  @Test
+  void generatePaymentReceiptPdf_Success_ReturnsPdf() throws Exception {
+    Client client = createClient(1L, "Ahmed");
+    User user = createUser(1L, "admin@example.com");
+    PaymentReceipt receipt = createPaymentReceipt(7L);
+    receipt.setClient(client);
+    receipt.setUser(user);
+
+    when(clientService.getClientPaymentReceiptById(1L, 7L)).thenReturn(Optional.of(receipt));
+    when(pdfGenerationService.generatePaymentReceiptPdf(receipt))
+        .thenReturn(new byte[] {1, 2, 3, 4, 5});
+
+    ResponseEntity<byte[]> response = clientController.generatePaymentReceiptPdf(1L, 7L);
+
+    assertEquals(HttpStatus.OK, response.getStatusCode());
+    assertEquals(5, response.getBody().length);
+    assertEquals(
+        org.springframework.http.MediaType.APPLICATION_PDF, response.getHeaders().getContentType());
+    assertTrue(
+        response.getHeaders().getContentDisposition().toString().contains("REC-2024-001.pdf"));
+  }
+
+  @Test
+  void generatePaymentReceiptPdf_NotFound_ThrowsNotFound() {
+    when(clientService.getClientPaymentReceiptById(1L, 999L)).thenReturn(Optional.empty());
+
+    ResponseStatusException ex =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            ResponseStatusException.class,
+            () -> clientController.generatePaymentReceiptPdf(1L, 999L));
+
+    assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
+  }
+
+  @Test
+  void generatePaymentReceiptPdf_PdfGenerationFails_ThrowsInternalServerError() throws Exception {
+    Client client = createClient(1L, "Ahmed");
+    PaymentReceipt receipt = createPaymentReceipt(1L);
+    receipt.setClient(client);
+
+    when(clientService.getClientPaymentReceiptById(1L, 1L)).thenReturn(Optional.of(receipt));
+    when(pdfGenerationService.generatePaymentReceiptPdf(receipt))
+        .thenThrow(new java.io.IOException("PDF error"));
+
+    ResponseStatusException ex =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            ResponseStatusException.class,
+            () -> clientController.generatePaymentReceiptPdf(1L, 1L));
+
+    assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, ex.getStatusCode());
   }
 }

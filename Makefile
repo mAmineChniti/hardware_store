@@ -98,6 +98,7 @@ docker-run: ## Run Docker container
 docker-up: ## Start services with docker compose (build and detached)
 	@echo "$(BLUE)Starting services with docker compose...$(NC)"
 	docker compose up -d --build
+	@echo "$(GREEN)API docs available at: http://localhost:$${APP_PORT:-8080}/swagger-ui/index.html$(NC)"
 
 .PHONY: docker-down
 docker-down: ## Stop services with docker compose

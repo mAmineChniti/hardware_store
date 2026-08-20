@@ -11,11 +11,18 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,15 +32,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import tn.inovexahub.hardware_store.dto.PaymentRequest;
 import tn.inovexahub.hardware_store.entity.Client;
 import tn.inovexahub.hardware_store.entity.CreditHistory;
 import tn.inovexahub.hardware_store.entity.PaymentReceipt;
 import tn.inovexahub.hardware_store.entity.User;
-import tn.inovexahub.hardware_store.enums.PaymentMethod;
 import tn.inovexahub.hardware_store.exception.ClientNotFoundException;
 import tn.inovexahub.hardware_store.exception.InvalidPaymentException;
 import tn.inovexahub.hardware_store.repository.UserRepository;
 import tn.inovexahub.hardware_store.service.ClientService;
+import tn.inovexahub.hardware_store.service.PdfGenerationService;
 
 @RestController
 @RequestMapping("/api/clients")
@@ -41,12 +49,19 @@ import tn.inovexahub.hardware_store.service.ClientService;
 @SecurityRequirement(name = "bearerAuth")
 public class ClientController {
 
+  private static final Logger log = LoggerFactory.getLogger(ClientController.class);
+
   private final ClientService clientService;
   private final UserRepository userRepository;
+  private final PdfGenerationService pdfGenerationService;
 
-  public ClientController(ClientService clientService, UserRepository userRepository) {
+  public ClientController(
+      ClientService clientService,
+      UserRepository userRepository,
+      PdfGenerationService pdfGenerationService) {
     this.clientService = clientService;
     this.userRepository = userRepository;
+    this.pdfGenerationService = pdfGenerationService;
   }
 
   // ==================== Client CRUD ====================
@@ -342,27 +357,34 @@ public class ClientController {
             responseCode = "403",
             description = "Forbidden - insufficient role privileges",
             content = @Content),
-        @ApiResponse(responseCode = "404", description = "Client not found", content = @Content)
+        @ApiResponse(
+            responseCode = "404",
+            description = "Client or user not found",
+            content = @Content)
       })
   public ResponseEntity<PaymentReceipt> processPayment(
       @Parameter(description = "Client ID", example = "1", required = true) @PathVariable Long id,
-      @Parameter(description = "Amount paid", example = "200.00", required = true) @RequestParam
-          BigDecimal amountPaid,
-      @Parameter(description = "Payment method (CASH, CHEQUE, BANK_TRANSFER)", required = true)
-          @RequestParam
-          PaymentMethod paymentMethod,
-      @Parameter(description = "User ID who received payment", example = "1", required = true)
-          @RequestParam
-          Long userId) {
+      @RequestBody(description = "Payment details", required = true)
+          @Valid
+          @org.springframework.web.bind.annotation.RequestBody
+          PaymentRequest paymentRequest,
+      @Parameter(hidden = true) Authentication authentication) {
 
     try {
       Client client =
           clientService.getClientById(id).orElseThrow(() -> new ClientNotFoundException(id));
 
-      User user = userRepository.findById(userId).orElse(null);
+      User user =
+          userRepository
+              .findByEmail(authentication.getName())
+              .orElseThrow(
+                  () ->
+                      new ResponseStatusException(
+                          HttpStatus.NOT_FOUND, "Authenticated user not found"));
 
       PaymentReceipt paymentReceipt =
-          clientService.processPayment(client, amountPaid, paymentMethod, user);
+          clientService.processPayment(
+              client, paymentRequest.getAmountPaid(), paymentRequest.getPaymentMethod(), user);
       return ResponseEntity.status(HttpStatus.CREATED).body(paymentReceipt);
     } catch (ClientNotFoundException e) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
@@ -415,5 +437,64 @@ public class ClientController {
       threshold = new BigDecimal("100.0");
     }
     return ResponseEntity.ok(clientService.getClientsNearCreditLimit(threshold));
+  }
+
+  @GetMapping("/{clientId}/payments/{receiptId}/pdf")
+  @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+  @Operation(
+      summary = "Generate payment receipt PDF",
+      description = "Generate a PDF for a specific payment receipt")
+  @ApiResponses(
+      value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "PDF receipt generated successfully",
+            content = @Content(mediaType = "application/pdf")),
+        @ApiResponse(responseCode = "401", description = "Unauthorized access", content = @Content),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Forbidden - insufficient role privileges",
+            content = @Content),
+        @ApiResponse(
+            responseCode = "404",
+            description = "Client or payment receipt not found",
+            content = @Content),
+        @ApiResponse(
+            responseCode = "500",
+            description = "Failed to generate PDF",
+            content = @Content)
+      })
+  public ResponseEntity<byte[]> generatePaymentReceiptPdf(
+      @Parameter(description = "Client ID", example = "1", required = true) @PathVariable
+          Long clientId,
+      @Parameter(description = "Payment receipt ID", example = "1", required = true) @PathVariable
+          Long receiptId) {
+
+    PaymentReceipt receipt =
+        clientService
+            .getClientPaymentReceiptById(clientId, receiptId)
+            .orElseThrow(
+                () ->
+                    new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment receipt not found"));
+
+    try {
+      byte[] pdfBytes = pdfGenerationService.generatePaymentReceiptPdf(receipt);
+
+      HttpHeaders headers = new HttpHeaders();
+      headers.setContentType(MediaType.APPLICATION_PDF);
+      headers.setContentDisposition(
+          ContentDisposition.builder("attachment")
+              .filename(receipt.getReceiptNumber() + ".pdf")
+              .build());
+
+      return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
+    } catch (IOException e) {
+      log.error(
+          "Failed to generate payment receipt PDF for receipt {}: {}",
+          receiptId,
+          e.getMessage(),
+          e);
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to generate PDF");
+    }
   }
 }

@@ -1,16 +1,27 @@
 package tn.inovexahub.hardware_store.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 import tn.inovexahub.hardware_store.entity.Document;
 import tn.inovexahub.hardware_store.entity.DocumentLine;
 import tn.inovexahub.hardware_store.entity.Product;
 import tn.inovexahub.hardware_store.entity.ProductConditioning;
+import tn.inovexahub.hardware_store.entity.ProductVariant;
 import tn.inovexahub.hardware_store.enums.DocumentStatus;
 import tn.inovexahub.hardware_store.enums.DocumentType;
 import tn.inovexahub.hardware_store.enums.TransactionType;
@@ -22,28 +33,30 @@ import tn.inovexahub.hardware_store.repository.ProductConditioningRepository;
 @Transactional
 public class DocumentService {
 
+  private static final Logger log = LoggerFactory.getLogger(DocumentService.class);
+
   private final DocumentRepository documentRepository;
   private final DocumentLineRepository documentLineRepository;
   private final ClientService clientService;
-  private final ProductService productService;
   private final ProductConditioningRepository productConditioningRepository;
+  private final ProductBatchService productBatchService;
 
   // Constants from spec
-  private static final BigDecimal TVA_RATE = new BigDecimal("0.19");
   private static final BigDecimal STAMP_DUTY = new BigDecimal("1.000");
-  private static final BigDecimal DEFAULT_TRANSPORT_FEE = new BigDecimal("10.000");
+
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   public DocumentService(
       DocumentRepository documentRepository,
       DocumentLineRepository documentLineRepository,
       ClientService clientService,
-      ProductService productService,
-      ProductConditioningRepository productConditioningRepository) {
+      ProductConditioningRepository productConditioningRepository,
+      ProductBatchService productBatchService) {
     this.documentRepository = documentRepository;
     this.documentLineRepository = documentLineRepository;
     this.clientService = clientService;
-    this.productService = productService;
     this.productConditioningRepository = productConditioningRepository;
+    this.productBatchService = productBatchService;
   }
 
   // ==================== Document CRUD ====================
@@ -69,12 +82,20 @@ public class DocumentService {
   public Document createDocument(Document document) {
     // Set default values based on document type
     if (document.getVatRate() == null) {
-      document.setVatRate(TVA_RATE); // 0.19 (19%)
+      document.setVatRate(VatRates.DEFAULT_RATE); // 19% (stored as a percentage)
     }
 
-    if (document.getDocumentType() == DocumentType.DELIVERY_NOTE
-        && document.getTransportFee() == null) {
-      document.setTransportFee(DEFAULT_TRANSPORT_FEE);
+    if (Boolean.TRUE.equals(document.getIsCreditSale()) && document.getClient() == null) {
+      throw new IllegalArgumentException("Credit sales require a client");
+    }
+
+    if (Boolean.TRUE.equals(document.getIsDelivery()) && document.getTransportFee() == null) {
+      throw new IllegalArgumentException(
+          "Delivery documents require a transport fee to be specified");
+    }
+
+    if (!Boolean.TRUE.equals(document.getIsDelivery())) {
+      document.setTransportFee(null);
     }
 
     if (document.getDocumentType() == DocumentType.INVOICE && document.getStampDuty() == null) {
@@ -112,20 +133,39 @@ public class DocumentService {
     document.setDocumentType(documentDetails.getDocumentType());
     document.setClient(documentDetails.getClient());
     document.setUser(documentDetails.getUser());
+    if (documentDetails.getIsDelivery() != null) {
+      document.setIsDelivery(documentDetails.getIsDelivery());
+    }
     document.setTransportFee(documentDetails.getTransportFee());
     document.setStampDuty(documentDetails.getStampDuty());
     document.setIsCreditSale(documentDetails.getIsCreditSale());
+    boolean vatRateChanged =
+        documentDetails.getVatRate() != null
+            && documentDetails.getVatRate().compareTo(document.getVatRate()) != 0;
+    if (documentDetails.getVatRate() != null) {
+      document.setVatRate(documentDetails.getVatRate());
+    }
 
-    // Reapply document type defaults if type changed
-    if (document.getDocumentType() == DocumentType.DELIVERY_NOTE
-        && document.getTransportFee() == null) {
-      document.setTransportFee(DEFAULT_TRANSPORT_FEE);
+    if (Boolean.TRUE.equals(document.getIsCreditSale()) && document.getClient() == null) {
+      throw new IllegalArgumentException("Credit sales require a client");
+    }
+    if (Boolean.TRUE.equals(document.getIsDelivery()) && document.getTransportFee() == null) {
+      throw new IllegalArgumentException(
+          "Delivery documents require a transport fee to be specified");
+    }
+
+    if (!Boolean.TRUE.equals(document.getIsDelivery())) {
+      document.setTransportFee(null);
     }
 
     if (document.getDocumentType() == DocumentType.INVOICE && document.getStampDuty() == null) {
       document.setStampDuty(STAMP_DUTY);
     }
 
+    // Recompute line VAT when the rate changed, then document totals from the updated lines
+    if (vatRateChanged) {
+      recomputeLineVat(document);
+    }
     // Recalculate document totals after type/fee changes
     recalculateDocumentTotals(document.getId());
 
@@ -161,9 +201,9 @@ public class DocumentService {
    * @param documentId Document ID
    * @param product Product
    * @param quantity Quantity
-   * @param unitPrice Unit price (optional, auto-calculated for heavy materials or conditioning)
+   * @param unitPrice Unit price (optional, uses batch price if not provided)
    * @param conditioningDescription Conditioning description (optional)
-   * @param isDelivered Whether the product is delivered (for dual pricing)
+   * @param isDelivered Whether the product is delivered
    * @param conditioningId Optional ProductConditioning ID for non-proportional pricing
    * @return Created document line
    */
@@ -175,8 +215,47 @@ public class DocumentService {
       String conditioningDescription,
       Boolean isDelivered,
       Long conditioningId) {
+    return addDocumentLine(
+        documentId,
+        product,
+        null,
+        quantity,
+        unitPrice,
+        conditioningDescription,
+        isDelivered,
+        conditioningId);
+  }
+
+  /**
+   * Add a line to a document (variant-aware).
+   *
+   * <p>Stock is NOT deducted here: it is only reserved (FIFO) when the document is validated. This
+   * method snapshots unit price and cost from the available batches without mutating them.
+   *
+   * @param documentId Document ID
+   * @param product Product
+   * @param variant Optional product variant
+   * @param quantity Quantity
+   * @param unitPrice Unit price (optional, uses batch price if not provided)
+   * @param conditioningDescription Conditioning description (optional)
+   * @param isDelivered Whether the product is delivered
+   * @param conditioningId Optional ProductConditioning ID for non-proportional pricing
+   * @return Created document line
+   */
+  public DocumentLine addDocumentLine(
+      Long documentId,
+      Product product,
+      ProductVariant variant,
+      BigDecimal quantity,
+      BigDecimal unitPrice,
+      String conditioningDescription,
+      Boolean isDelivered,
+      Long conditioningId) {
     if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
       throw new RuntimeException("Quantity must be positive");
+    }
+    if (unitPrice != null && unitPrice.compareTo(BigDecimal.ZERO) < 0) {
+      throw new RuntimeException("Unit price cannot be negative");
     }
 
     Document document =
@@ -188,6 +267,13 @@ public class DocumentService {
       throw new RuntimeException("Only DRAFT documents can have lines added");
     }
 
+    if (variant != null
+        && (variant.getProduct() == null
+            || !variant.getProduct().getId().equals(product.getId()))) {
+      throw new RuntimeException("Variant does not belong to this product");
+    }
+
+    BigDecimal multiplier = BigDecimal.ONE;
     // Apply ProductConditioning pricing if specified
     if (conditioningId != null) {
       ProductConditioning conditioning =
@@ -199,49 +285,64 @@ public class DocumentService {
       }
       unitPrice = conditioning.getUnitPrice();
       conditioningDescription = conditioning.getDescription();
-    }
-
-    // Auto-calculate unit price for heavy materials based on delivery mode
-    if (product.getIsHeavyMaterial() && isDelivered != null && unitPrice == null) {
-      if (isDelivered && product.getPriceDelivered() != null) {
-        unitPrice = product.getPriceDelivered();
-      } else if (!isDelivered && product.getPriceOnSite() != null) {
-        unitPrice = product.getPriceOnSite();
+      if (conditioning.getQuantityPerUnit() != null) {
+        multiplier = conditioning.getQuantityPerUnit();
       }
     }
 
-    if (unitPrice == null || unitPrice.compareTo(BigDecimal.ZERO) < 0) {
-      throw new RuntimeException("Unit price cannot be negative");
+    // Snapshot unit price and cost from available FIFO batches WITHOUT mutating stock.
+    // Stock is deducted at validation, where the exact batches are allocated and stored.
+    BigDecimal effectiveQuantity = quantity.multiply(multiplier);
+    List<ProductBatchService.BatchAllocation> batchAllocations =
+        variant != null
+            ? productBatchService.estimateAllocationFromVariant(variant.getId(), effectiveQuantity)
+            : productBatchService.estimateAllocation(product.getId(), effectiveQuantity);
+
+    if (unitPrice == null) {
+      BigDecimal weightedAveragePrice = weightedAveragePrice(batchAllocations);
+      if (weightedAveragePrice != null) {
+        unitPrice = weightedAveragePrice;
+      } else if (product.getUnitPrice() != null) {
+        unitPrice = product.getUnitPrice();
+      } else {
+        throw new RuntimeException("Cannot calculate unit price from batches");
+      }
     }
+
+    // Calculate cost per sale unit from allocated batches for margin
+    BigDecimal baseUnitCost = weightedAverageCost(batchAllocations);
+    if (baseUnitCost == null) {
+      baseUnitCost =
+          product.getAveragePurchasePrice() != null
+              ? product.getAveragePurchasePrice()
+              : BigDecimal.ZERO;
+    }
+    BigDecimal unitCost = baseUnitCost.multiply(multiplier).setScale(3, RoundingMode.HALF_UP);
 
     DocumentLine line = new DocumentLine();
     line.setDocument(document);
     line.setProduct(product);
+    line.setVariant(variant);
     line.setQuantity(quantity);
     line.setUnitPrice(unitPrice);
+    line.setUnitCost(unitCost);
     line.setConditioningDescription(conditioningDescription);
+    line.setConditioningQuantityPerUnit(multiplier);
     line.setIsDelivered(isDelivered != null ? isDelivered : false);
-
-    // Snapshot unit cost at sale time for margin calculation
-    line.setUnitCost(product.getAveragePurchasePrice());
 
     // Calculate line totals
     BigDecimal lineExcludingTax = unitPrice.multiply(quantity).setScale(3, RoundingMode.HALF_UP);
     line.setTotalLineExcludingTax(lineExcludingTax);
 
-    // Calculate line TTC (with document's VAT rate)
+    // Calculate line TTC (with document's VAT rate, stored as a percentage)
+    BigDecimal vatRate = VatRates.normalize(document.getVatRate());
     BigDecimal lineVat =
-        lineExcludingTax.multiply(document.getVatRate()).setScale(3, RoundingMode.HALF_UP);
+        lineExcludingTax.multiply(vatRate).divide(BigDecimal.valueOf(100), 3, RoundingMode.HALF_UP);
     BigDecimal lineIncludingTax = lineExcludingTax.add(lineVat).setScale(3, RoundingMode.HALF_UP);
     line.setTotalLineIncludingTax(lineIncludingTax);
 
     // Set line number with synchronization for concurrency safety
-    synchronized (this) {
-      List<DocumentLine> existingLines = documentLineRepository.findByDocumentId(documentId);
-      int maxLineNumber =
-          existingLines.stream().mapToInt(DocumentLine::getLineNumber).max().orElse(0);
-      line.setLineNumber(maxLineNumber + 1);
-    }
+    line.setLineNumber(nextLineNumber(documentId));
 
     DocumentLine savedLine = documentLineRepository.save(line);
 
@@ -274,6 +375,33 @@ public class DocumentService {
     line.setQuantity(lineDetails.getQuantity());
     line.setUnitPrice(lineDetails.getUnitPrice());
     line.setConditioningDescription(lineDetails.getConditioningDescription());
+    boolean conditioningQuantityChanged =
+        lineDetails.getConditioningQuantityPerUnit() != null
+            && !lineDetails
+                .getConditioningQuantityPerUnit()
+                .equals(line.getConditioningQuantityPerUnit());
+    boolean variantChanged =
+        lineDetails.getVariant() != null
+            && !lineDetails
+                .getVariant()
+                .getId()
+                .equals(line.getVariant() != null ? line.getVariant().getId() : null);
+    if (lineDetails.getConditioningQuantityPerUnit() != null) {
+      line.setConditioningQuantityPerUnit(lineDetails.getConditioningQuantityPerUnit());
+    }
+    if (lineDetails.getVariant() != null) {
+      if (line.getProduct() != null
+          && lineDetails.getVariant().getProduct() != null
+          && !lineDetails.getVariant().getProduct().getId().equals(line.getProduct().getId())) {
+        throw new RuntimeException("Variant does not belong to this product");
+      }
+      line.setVariant(lineDetails.getVariant());
+    }
+
+    // Recompute unit cost from the batch estimate when the costing inputs changed
+    if (conditioningQuantityChanged || variantChanged) {
+      recomputeLineUnitCost(line);
+    }
 
     // Recalculate line totals
     BigDecimal lineExcludingTax =
@@ -283,10 +411,9 @@ public class DocumentService {
             .setScale(3, RoundingMode.HALF_UP);
     line.setTotalLineExcludingTax(lineExcludingTax);
 
+    BigDecimal vatRate = VatRates.normalize(line.getDocument().getVatRate());
     BigDecimal lineVat =
-        lineExcludingTax
-            .multiply(line.getDocument().getVatRate())
-            .setScale(3, RoundingMode.HALF_UP);
+        lineExcludingTax.multiply(vatRate).divide(BigDecimal.valueOf(100), 3, RoundingMode.HALF_UP);
     BigDecimal lineIncludingTax = lineExcludingTax.add(lineVat).setScale(3, RoundingMode.HALF_UP);
     line.setTotalLineIncludingTax(lineIncludingTax);
 
@@ -341,12 +468,9 @@ public class DocumentService {
             .map(line -> line.getTotalLineIncludingTax().subtract(line.getTotalLineExcludingTax()))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-    // Add transport fee for BL and Invoice
-    BigDecimal transportFee =
-        document.getTransportFee() != null ? document.getTransportFee() : BigDecimal.ZERO;
-    if (document.getDocumentType() == DocumentType.DELIVERY_NOTE
-        || document.getDocumentType() == DocumentType.INVOICE) {
-      totalExcludingTax = totalExcludingTax.add(transportFee);
+    // Add transport fee only for deliveries
+    if (Boolean.TRUE.equals(document.getIsDelivery()) && document.getTransportFee() != null) {
+      totalExcludingTax = totalExcludingTax.add(document.getTransportFee());
     }
 
     // Calculate total TTC
@@ -367,7 +491,8 @@ public class DocumentService {
 
   /**
    * Validate a document (change status from DRAFT to VALIDATED). For BL and Invoice, this will
-   * deduct stock. For credit sales, this will add credit history entry.
+   * deduct stock (FIFO batches are allocated and recorded on each line). For credit sales, this
+   * will add credit history entry.
    *
    * @param documentId Document ID
    * @return Validated document
@@ -394,8 +519,14 @@ public class DocumentService {
       throw new RuntimeException("Only DRAFT documents can be validated");
     }
 
+    if (Boolean.TRUE.equals(document.getIsCreditSale()) && document.getClient() == null) {
+      throw new RuntimeException("Credit sales require a client");
+    }
+
     // Check credit limit for credit sales (unless skipped for BL->Invoice conversion)
-    if (!skipStockDeduction && document.getIsCreditSale() && document.getClient() != null) {
+    if (!skipStockDeduction
+        && Boolean.TRUE.equals(document.getIsCreditSale())
+        && document.getClient() != null) {
       clientService.validateCreditLimit(
           document.getClient().getId(), document.getTotalIncludingTax());
     }
@@ -408,7 +539,9 @@ public class DocumentService {
     }
 
     // Add credit history entry for credit sales (unless skipped)
-    if (!skipStockDeduction && document.getIsCreditSale() && document.getClient() != null) {
+    if (!skipStockDeduction
+        && Boolean.TRUE.equals(document.getIsCreditSale())
+        && document.getClient() != null) {
       clientService.addCreditHistoryEntry(
           document.getClient(), document, document.getTotalIncludingTax(), TransactionType.SALE);
     }
@@ -433,11 +566,17 @@ public class DocumentService {
       throw new RuntimeException("Document is already cancelled");
     }
 
-    // Restore stock if document was validated
-    // Note: Invoices created from delivery note conversion should not restore stock
-    // since stock was already deducted when the delivery note was validated
     if (document.getStatus() == DocumentStatus.VALIDATED) {
-      // Skip stock restoration for invoices converted from delivery notes
+      // A delivery note that was converted to an invoice cannot be cancelled on its own.
+      if (document.getDocumentType() == DocumentType.DELIVERY_NOTE
+          && document.getConvertedToInvoiceId() != null) {
+        throw new RuntimeException(
+            "Delivery note has been converted to an invoice and cannot be cancelled");
+      }
+
+      // Restore stock if document was validated.
+      // Invoices created from delivery note conversion should not restore stock
+      // since stock was already deducted when the delivery note was validated.
       if (document.getDocumentType() == DocumentType.DELIVERY_NOTE
           || (document.getDocumentType() == DocumentType.INVOICE
               && document.getSourceDeliveryNoteId() == null)) {
@@ -446,7 +585,7 @@ public class DocumentService {
 
       // Skip credit history adjustment for invoices converted from delivery notes
       // since credit history was already added when the delivery note was validated
-      if (document.getIsCreditSale()
+      if (Boolean.TRUE.equals(document.getIsCreditSale())
           && document.getClient() != null
           && document.getSourceDeliveryNoteId() == null) {
         clientService.addCreditHistoryEntry(
@@ -462,35 +601,64 @@ public class DocumentService {
   }
 
   /**
-   * Deduct stock for document lines.
+   * Deduct stock for document lines. Allocates FIFO batches and records the exact allocation per
+   * line so it can be restored precisely on cancel.
    *
    * @param documentId Document ID
    */
   private void deductStock(Long documentId) {
     List<DocumentLine> lines = documentLineRepository.findByDocumentId(documentId);
     for (DocumentLine line : lines) {
-      if (line.getProduct() != null && line.getQuantity() != null) {
-        productService.updateStockQuantity(line.getProduct().getId(), line.getQuantity().negate());
-        line.setIsDelivered(true);
-        documentLineRepository.save(line);
+      if (line.getProduct() == null || line.getQuantity() == null) {
+        continue;
       }
+      BigDecimal multiplier =
+          line.getConditioningQuantityPerUnit() != null
+              ? line.getConditioningQuantityPerUnit()
+              : BigDecimal.ONE;
+      BigDecimal effectiveQuantity = line.getQuantity().multiply(multiplier);
+
+      List<ProductBatchService.BatchAllocation> allocations =
+          line.getVariant() != null
+              ? productBatchService.allocateStockFromVariant(
+                  line.getVariant().getId(), effectiveQuantity)
+              : productBatchService.allocateStock(line.getProduct().getId(), effectiveQuantity);
+
+      line.setBatchAllocations(serializeBatchAllocations(allocations));
+      line.setIsDelivered(true);
+      documentLineRepository.save(line);
     }
   }
 
   /**
-   * Restore stock for document lines.
+   * Restore stock for document lines using the recorded batch allocations.
    *
    * @param documentId Document ID
    */
   private void restoreStock(Long documentId) {
     List<DocumentLine> lines = documentLineRepository.findByDocumentId(documentId);
+    Map<Long, BigDecimal> allocations = new LinkedHashMap<>();
     for (DocumentLine line : lines) {
-      if (line.getProduct() != null && line.getQuantity() != null) {
-        productService.updateStockQuantity(line.getProduct().getId(), line.getQuantity());
-        line.setIsDelivered(false);
-        documentLineRepository.save(line);
+      if (line.getProduct() == null || line.getQuantity() == null) {
+        continue;
       }
+      if (line.getBatchAllocations() == null || line.getBatchAllocations().isBlank()) {
+        throw new IllegalArgumentException(
+            "Cannot cancel document "
+                + documentId
+                + ": line "
+                + line.getId()
+                + " is missing batch allocation data, so stock cannot be restored");
+      }
+      for (Map.Entry<Long, BigDecimal> entry :
+          deserializeBatchAllocations(line.getBatchAllocations()).entrySet()) {
+        allocations.merge(entry.getKey(), entry.getValue(), BigDecimal::add);
+      }
+      line.setBatchAllocations(null);
+      line.setIsDelivered(false);
+      documentLineRepository.save(line);
     }
+    productBatchService.restoreBatches(allocations);
   }
 
   /**
@@ -509,28 +677,30 @@ public class DocumentService {
       throw new RuntimeException("Only QUOTE can be converted to DELIVERY_NOTE");
     }
 
+    if (quote.getStatus() == DocumentStatus.CANCELLED) {
+      throw new RuntimeException("Cancelled quotes cannot be converted");
+    }
+
     // Create new BL
     Document bl = new Document();
     bl.setDocumentType(DocumentType.DELIVERY_NOTE);
     bl.setClient(quote.getClient());
     bl.setUser(quote.getUser());
     bl.setIsCreditSale(quote.getIsCreditSale());
-    bl.setTransportFee(DEFAULT_TRANSPORT_FEE);
+    bl.setIsDelivery(quote.getIsDelivery());
+    bl.setTransportFee(quote.getTransportFee());
+    bl.setVatRate(quote.getVatRate());
 
     Document savedBl = createDocument(bl);
 
-    // Copy lines
+    // Copy lines without touching stock (no allocation at conversion)
     List<DocumentLine> quoteLines = documentLineRepository.findByDocumentId(quoteId);
     for (DocumentLine quoteLine : quoteLines) {
-      addDocumentLine(
-          savedBl.getId(),
-          quoteLine.getProduct(),
-          quoteLine.getQuantity(),
-          quoteLine.getUnitPrice(),
-          quoteLine.getConditioningDescription(),
-          quoteLine.getIsDelivered(),
-          null);
+      copyLineToDocument(quoteLine, savedBl, false);
     }
+
+    // Recalculate totals using the copied lines
+    recalculateDocumentTotals(savedBl.getId());
 
     return savedBl;
   }
@@ -565,23 +735,21 @@ public class DocumentService {
     invoice.setClient(bl.getClient());
     invoice.setUser(bl.getUser());
     invoice.setIsCreditSale(bl.getIsCreditSale());
+    invoice.setIsDelivery(bl.getIsDelivery());
     invoice.setTransportFee(bl.getTransportFee());
     invoice.setStampDuty(STAMP_DUTY);
+    invoice.setVatRate(bl.getVatRate());
 
     Document savedInvoice = createDocument(invoice);
 
-    // Copy lines
+    // Copy lines without re-allocating stock (BL validation already deducted it)
     List<DocumentLine> blLines = documentLineRepository.findByDocumentId(deliveryNoteId);
     for (DocumentLine blLine : blLines) {
-      addDocumentLine(
-          savedInvoice.getId(),
-          blLine.getProduct(),
-          blLine.getQuantity(),
-          blLine.getUnitPrice(),
-          blLine.getConditioningDescription(),
-          blLine.getIsDelivered(),
-          null);
+      copyLineToDocument(blLine, savedInvoice, true);
     }
+
+    // Recalculate totals using the copied lines
+    recalculateDocumentTotals(savedInvoice.getId());
 
     // Validate invoice (skip stock deduction since BL already applied it)
     validateDocument(savedInvoice.getId(), true);
@@ -598,6 +766,163 @@ public class DocumentService {
   }
 
   // ==================== Helper Methods ====================
+
+  /**
+   * Copy a line from one document to another without allocating stock. Line totals are recomputed
+   * using the target document's VAT rate.
+   */
+  private void copyLineToDocument(DocumentLine source, Document target, boolean isDelivered) {
+    if (source.getProduct() == null
+        || source.getQuantity() == null
+        || source.getUnitPrice() == null) {
+      log.warn(
+          "Skipping document line {}: missing product, quantity or unit price", source.getId());
+      return;
+    }
+
+    DocumentLine line = new DocumentLine();
+    line.setDocument(target);
+    line.setProduct(source.getProduct());
+    line.setVariant(source.getVariant());
+    line.setQuantity(source.getQuantity());
+    line.setUnitPrice(source.getUnitPrice());
+    line.setUnitCost(source.getUnitCost());
+    line.setConditioningDescription(source.getConditioningDescription());
+    line.setConditioningQuantityPerUnit(source.getConditioningQuantityPerUnit());
+    line.setIsDelivered(isDelivered);
+
+    BigDecimal vatRate = VatRates.normalize(target.getVatRate());
+    BigDecimal lineExcludingTax =
+        line.getUnitPrice().multiply(line.getQuantity()).setScale(3, RoundingMode.HALF_UP);
+    BigDecimal lineVat =
+        lineExcludingTax.multiply(vatRate).divide(BigDecimal.valueOf(100), 3, RoundingMode.HALF_UP);
+    line.setTotalLineExcludingTax(lineExcludingTax);
+    line.setTotalLineIncludingTax(lineExcludingTax.add(lineVat));
+
+    line.setLineNumber(nextLineNumber(target.getId()));
+
+    documentLineRepository.save(line);
+  }
+
+  /**
+   * Assign the next line number for a document. The parent document row is locked for update so
+   * concurrent line insertions on the same document are serialized and cannot produce duplicates.
+   */
+  private int nextLineNumber(Long documentId) {
+    try {
+      documentRepository
+          .findByIdForUpdate(documentId)
+          .orElseThrow(() -> new RuntimeException("Document not found"));
+    } catch (PessimisticLockingFailureException e) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "Document is currently locked by another operation. Please retry.");
+    }
+    List<DocumentLine> existingLines = documentLineRepository.findByDocumentId(documentId);
+    return existingLines.stream()
+            .filter(line -> line.getLineNumber() != null)
+            .mapToInt(DocumentLine::getLineNumber)
+            .max()
+            .orElse(0)
+        + 1;
+  }
+
+  /** Recompute every line's totalLineIncludingTax using the document's current VAT rate. */
+  private void recomputeLineVat(Document document) {
+    BigDecimal vatRate = VatRates.normalize(document.getVatRate());
+    for (DocumentLine line : documentLineRepository.findByDocumentId(document.getId())) {
+      BigDecimal lineVat =
+          line.getTotalLineExcludingTax()
+              .multiply(vatRate)
+              .divide(BigDecimal.valueOf(100), 3, RoundingMode.HALF_UP);
+      line.setTotalLineIncludingTax(
+          line.getTotalLineExcludingTax().add(lineVat).setScale(3, RoundingMode.HALF_UP));
+      documentLineRepository.save(line);
+    }
+  }
+
+  /**
+   * Recompute a line's unit cost from the FIFO batch estimate using the same base-unit-cost
+   * multiplied-by-conditioning-multiplier calculation as {@link #addDocumentLine}.
+   */
+  private void recomputeLineUnitCost(DocumentLine line) {
+    if (line.getProduct() == null || line.getQuantity() == null) {
+      return;
+    }
+    BigDecimal multiplier =
+        line.getConditioningQuantityPerUnit() != null
+            ? line.getConditioningQuantityPerUnit()
+            : BigDecimal.ONE;
+    BigDecimal effectiveQuantity = line.getQuantity().multiply(multiplier);
+
+    List<ProductBatchService.BatchAllocation> batchAllocations =
+        line.getVariant() != null
+            ? productBatchService.estimateAllocationFromVariant(
+                line.getVariant().getId(), effectiveQuantity)
+            : productBatchService.estimateAllocation(line.getProduct().getId(), effectiveQuantity);
+
+    BigDecimal baseUnitCost = weightedAverageCost(batchAllocations);
+    if (baseUnitCost == null) {
+      if (line.getProduct().getAveragePurchasePrice() != null) {
+        baseUnitCost = line.getProduct().getAveragePurchasePrice();
+      } else {
+        baseUnitCost = BigDecimal.ZERO;
+      }
+    }
+    line.setUnitCost(baseUnitCost.multiply(multiplier).setScale(3, RoundingMode.HALF_UP));
+  }
+
+  private BigDecimal weightedAveragePrice(List<ProductBatchService.BatchAllocation> allocations) {
+    BigDecimal totalPrice = BigDecimal.ZERO;
+    BigDecimal totalQty = BigDecimal.ZERO;
+    for (ProductBatchService.BatchAllocation allocation : allocations) {
+      if (allocation.getUnitPrice() != null) {
+        totalPrice = totalPrice.add(allocation.getUnitPrice().multiply(allocation.getQuantity()));
+        totalQty = totalQty.add(allocation.getQuantity());
+      }
+    }
+    if (totalQty.compareTo(BigDecimal.ZERO) <= 0) {
+      return null;
+    }
+    return totalPrice.divide(totalQty, 3, RoundingMode.HALF_UP);
+  }
+
+  private BigDecimal weightedAverageCost(List<ProductBatchService.BatchAllocation> allocations) {
+    BigDecimal totalCost = BigDecimal.ZERO;
+    BigDecimal totalQty = BigDecimal.ZERO;
+    for (ProductBatchService.BatchAllocation allocation : allocations) {
+      if (allocation.getUnitCost() != null) {
+        totalCost = totalCost.add(allocation.getUnitCost().multiply(allocation.getQuantity()));
+        totalQty = totalQty.add(allocation.getQuantity());
+      }
+    }
+    if (totalQty.compareTo(BigDecimal.ZERO) <= 0) {
+      return null;
+    }
+    return totalCost.divide(totalQty, 3, RoundingMode.HALF_UP);
+  }
+
+  private String serializeBatchAllocations(List<ProductBatchService.BatchAllocation> allocations) {
+    Map<Long, BigDecimal> map = new LinkedHashMap<>();
+    for (ProductBatchService.BatchAllocation allocation : allocations) {
+      map.put(allocation.getBatchId(), allocation.getQuantity());
+    }
+    try {
+      return OBJECT_MAPPER.writeValueAsString(map);
+    } catch (JsonProcessingException e) {
+      throw new RuntimeException("Failed to serialize batch allocations", e);
+    }
+  }
+
+  private Map<Long, BigDecimal> deserializeBatchAllocations(String json) {
+    if (json == null || json.isBlank()) {
+      return Map.of();
+    }
+    try {
+      return OBJECT_MAPPER.readValue(json, new TypeReference<Map<Long, BigDecimal>>() {});
+    } catch (JsonProcessingException e) {
+      throw new RuntimeException("Failed to deserialize batch allocations", e);
+    }
+  }
 
   private String generateDocumentNumber(DocumentType documentType) {
     String prefix;

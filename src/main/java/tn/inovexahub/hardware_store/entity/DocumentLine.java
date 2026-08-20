@@ -1,5 +1,6 @@
 package tn.inovexahub.hardware_store.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -16,7 +17,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 /**
  * DocumentLine entity representing lines of a document. Section 7: DocumentLine entity -
@@ -53,9 +56,35 @@ public class DocumentLine {
   @JoinColumn(name = "product_id")
   private Product product;
 
+  @Schema(
+      description = "Product variant in this line (optional)",
+      accessMode = Schema.AccessMode.READ_ONLY)
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "variant_id")
+  @ToString.Exclude
+  @EqualsAndHashCode.Exclude
+  private ProductVariant variant;
+
   @Schema(description = "Conditioning description snapshot", example = "Rouleau")
   @Column(name = "conditioning_description", length = 100)
   private String conditioningDescription; // Snapshot of how it was sold
+
+  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  @Schema(
+      description = "Number of base units per conditioning unit (e.g. 100 for a roll of 100m)",
+      example = "1.000",
+      accessMode = Schema.AccessMode.READ_ONLY)
+  @Column(name = "conditioning_quantity_per_unit", precision = 19, scale = 3)
+  private BigDecimal conditioningQuantityPerUnit = BigDecimal.ONE;
+
+  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+  @Schema(
+      description =
+          "FIFO batch allocation snapshot (JSON map of batchId -> quantity). "
+              + "Populated when the document is validated, used to restore batches on cancel",
+      accessMode = Schema.AccessMode.READ_ONLY)
+  @Column(name = "batch_allocations", columnDefinition = "TEXT")
+  private String batchAllocations;
 
   @Schema(description = "Quantity sold", example = "5.00")
   @Column(name = "quantity", precision = 19, scale = 3)
@@ -65,6 +94,7 @@ public class DocumentLine {
   @Column(name = "unit_price", precision = 19, scale = 3)
   private BigDecimal unitPrice; // Price per unit applied at sale time
 
+  @JsonProperty(access = JsonProperty.Access.READ_ONLY)
   @Schema(
       description =
           "Unit cost at sale time for margin (snapshotted automatically from the "

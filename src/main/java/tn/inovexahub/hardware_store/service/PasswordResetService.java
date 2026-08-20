@@ -31,7 +31,6 @@ public class PasswordResetService {
   public PasswordResetService(
       PasswordResetTokenRepository passwordResetTokenRepository,
       UserRepository userRepository,
-      EmailService emailService,
       PasswordEncoder passwordEncoder,
       ApplicationEventPublisher applicationEventPublisher,
       TransactionTemplate transactionTemplate,
